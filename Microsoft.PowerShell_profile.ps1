@@ -1,3 +1,35 @@
+# ================================
+# Chris Titus Profile – Safety Defaults
+# Prevent StrictMode variable errors
+# ================================
+
+# Override toggles (default: OFF)
+$debug_Override           = $false
+$repo_root_Override       = $null
+$timeFilePath_Override    = $null
+$updateInterval_Override  = $null
+$EDITOR_Override          = $null
+
+# Core defaults used later in profile
+$repo_root = if ($repo_root_Override) {
+    $repo_root_Override
+} else {
+    "$env:USERPROFILE\.config"
+}
+
+$timeFilePath = if ($timeFilePath_Override) {
+    $timeFilePath_Override
+} else {
+    Join-Path $env:LOCALAPPDATA "ctt-profile-last-run.txt"
+}
+
+$updateInterval = if ($updateInterval_Override -ne $null) {
+    $updateInterval_Override
+} else {
+    7
+}
+
+
 ### PowerShell Profile Refactor
 ### Version 1.04 - Refactored
 
