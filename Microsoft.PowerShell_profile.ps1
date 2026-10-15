@@ -1,1081 +1,1951 @@
-# ================================
-# MackDavinci God Profile / Divine Edition
-# When Vision Meets Word
-# ================================
+# -------------------------------------------------------------------
 
-# =========================================================
-# A MACK PROJEKT - Cyberpunk Splash
-# Drop into profile, then call: Show-AMPStartupSplash
-# =========================================================
+# MACKPROJEKT-COMMANDCENTER :: MasterMack PowerShell Profile
 
-function Write-Centered {
-    param(
-        [string]$Text,
-        [string]$Color = "Cyan",
-        [int]$YOffset = 0
-    )
+# MasterMack PowerShell Profile 6.1 (MACKPROJEKT-COMMANDCENTER edition)
 
-    try {
-        $width = $Host.UI.RawUI.WindowSize.Width
-        $x = [Math]::Max(0, [int](($width - $Text.Length) / 2))
-        $y = [Math]::Max(0, $Host.UI.RawUI.CursorPosition.Y + $YOffset)
-        $Host.UI.RawUI.CursorPosition = New-Object System.Management.Automation.Host.Coordinates($x, $y)
-        Write-Host $Text -ForegroundColor $Color
-    } catch {
-        Write-Host $Text -ForegroundColor $Color
-    }
+# -------------------------------------------------------------------
+
+$global:debug_Override            = $null
+
+$global:repo_root_Override        = $null
+
+$global:timeFilePath_Override     = $null
+
+$global:updateInterval_Override   = $null
+
+$global:EDITOR_Override           = $null
+
+$script:repo_root        = "C:\AdminOps"
+
+$script:timeFilePath     = "C:\AdminOps\Logs\\.profile_last_run.txt"
+
+$script:updateInterval   = 1440
+
+$script:OpsPath          = "C:\AdminOps"
+
+$script:ToolsPath        = "C:\AdminOps\Tools"
+
+Set-StrictMode -Version Latest
+
+$ErrorActionPreference = "Continue"
+
+$Global:MackProfileMeta = @{
+
+    Author        = "Donyale Mack"
+
+    Version       = [version]"6.1"
+
+    Organization  = "Mack Studio Enterprises"
+
+    Environment   = "MACKPROJEKT-COMMANDCENTER"
+
+    Mode          = "CommandCenter"
+
+    ProfilePath   = $PROFILE
+
+    HashFile      = "$PROFILE.hash.txt"
+
+    Symlink       = "C:\MackGodModeLink.ps1"
+
 }
 
-function Show-AMPAsciiFrame {
-    param(
-        [string[]]$Art,
-        [string[]]$Palette
-    )
 
-    Clear-Host
+function Test-IsAdmin {
 
-    $height = $Host.UI.RawUI.WindowSize.Height
-    $width  = $Host.UI.RawUI.WindowSize.Width
-    $topPad = [Math]::Max(1, [int](($height - $Art.Count - 8) / 2))
+    $current = [Security.Principal.WindowsIdentity]::GetCurrent()
 
-    for ($i = 0; $i -lt $topPad; $i++) {
-        Write-Host ""
-    }
+    $principal = New-Object Security.Principal.WindowsPrincipal($current)
 
-    for ($i = 0; $i -lt $Art.Count; $i++) {
-        $color = $Palette[$i % $Palette.Count]
-        Write-Centered -Text $Art[$i] -Color $color
-    }
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+}
+
+function Ensure-Elevated {
+
+    param([string]$Purpose = "This action", [switch]$Relaunch)
+
+    if (Test-IsAdmin) { return $true }
 
     Write-Host ""
-    Write-Centered "████ CYBERPUNK BOOT SEQUENCE INITIALIZING ████" "Magenta"
-    Write-Centered "A MACK PROJEKT // SYSTEM READYING..." "Cyan"
-    Write-Centered "NEON GRID :: ACTIVE" "Blue"
+
+    Write-Host "[!] Elevation required: $Purpose" -ForegroundColor Yellow
+
+    if ($Relaunch) { Start-Process -FilePath "pwsh.exe" -Verb RunAs }
+
+    return $false
+
 }
 
-function Show-AMPImagePopup {
-    param(
-        [string]$ImagePath,
-        [int]$Milliseconds = 2200
+function Write-Section([string]$Title) {
+
+    Write-Host ""
+
+    Write-Host ("=" * 78) -ForegroundColor DarkGray
+
+    Write-Host $Title -ForegroundColor Cyan
+
+    Write-Host ("=" * 78) -ForegroundColor DarkGray
+
+}
+
+$script:AdminOpsLogRoot = Join-Path $env:ProgramData "MackStudio\EnterpriseAdminDevice"
+
+$script:AdminOpsLogFile = Join-Path $script:AdminOpsLogRoot ("AdminOpsMode_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+
+try {
+
+    New-Item -Path $script:AdminOpsLogRoot -ItemType Directory -Force -ErrorAction Stop | Out-Null
+
+} catch {
+
+    $script:AdminOpsLogRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "MackStudio\EnterpriseAdminDevice"
+
+    $script:AdminOpsLogFile = Join-Path $script:AdminOpsLogRoot ("AdminOpsMode_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+
+    New-Item -Path $script:AdminOpsLogRoot -ItemType Directory -Force | Out-Null
+
+}
+
+function Write-MackLog([string]$Message) {
+
+    $line = "{0}  {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
+
+    Add-Content -LiteralPath $script:AdminOpsLogFile -Value $line -Encoding utf8
+
+}
+
+# ===================================================================
+
+# MAXIMUM SYSTEM CONTROLS & RECLAIM LAYER
+
+# ===================================================================
+
+function Invoke-SafeDriveCleanup {
+
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+
+    param()
+
+    <#
+
+*    .SYNOPSIS*
+
+*        Aggressively purges multi-gigabyte system-generated trash, delivery*
+
+*        optimization stores, windows error reports, and user-space cache nests.*
+
+*    #>*
+
+    if (-not (Test-IsAdmin)) { Write-Warning "Administrative elevation required for deep system cleanup."; return }
+
+    Write-Section "Executing Safe System Drive Cleanup (C:)"
+
+    $StartSpace = (Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace
+
+    Write-Host "[*] Triggering silent Windows Native Storage Cleanmgr..." -ForegroundColor Cyan
+
+    $null = Start-Process -FilePath "cleanmgr.exe" -ArgumentList "/sagerun:1" -WindowStyle Hidden -Wait
+
+    $JunkTargets = @(
+
+        "$env:windir\Temp", "$env:LOCALAPPDATA\Temp",
+
+        "$env:ProgramData\Microsoft\Windows\WER",
+
+        "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Cache\Cache_Data",
+
+        "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Cache\Cache_Data"
+
     )
 
-    if (-not (Test-Path $ImagePath)) {
+    foreach ($Path in $JunkTargets) {
+
+        if ((Test-Path -LiteralPath $Path) -and $PSCmdlet.ShouldProcess($Path, 'Remove cache contents')) {
+
+            Write-Host "[*] Flushing allocations from: $Path" -ForegroundColor DarkGray
+
+            Get-ChildItem -LiteralPath $Path -Force -ErrorAction SilentlyContinue |
+
+                Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+
+        }
+
+    }
+
+    $EndSpace = (Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").FreeSpace
+
+    $SpaceSaved = [Math]::Round(($EndSpace - $StartSpace) / 1GB, 2)
+
+    Write-Section "Cleanup Complete: Instantly Recovered $SpaceSaved GB on C:"
+
+}
+
+function Invoke-Sledgehammer {
+
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
+
+    param([Parameter(Mandatory)][string]$ProcessName)
+
+    if (-not (Test-IsAdmin)) { Write-Warning "Sledgehammer requires administrative elevation."; return }
+
+    Write-Section "Invoking Sledgehammer Process Termination: $ProcessName"
+
+    $escapedName = $ProcessName.Replace("'", "''")
+
+    $Targets = Get-CimInstance Win32_Process -Filter "Name LIKE '%$escapedName%'"
+
+    if (-not $Targets) { Write-Host "[-] No matching processes found." -ForegroundColor Yellow; return }
+
+    foreach ($Proc in $Targets) {
+
+        Write-Host "[!] Target Found: $($Proc.Name) [PID: $($Proc.ProcessId)]" -ForegroundColor Red
+
+        try {
+
+            if (-not $PSCmdlet.ShouldProcess("$($Proc.Name) (PID $($Proc.ProcessId))", 'Terminate process')) { continue }
+
+            $Result = Invoke-CimMethod -InputObject $Proc -MethodName "Terminate"
+
+            if ($Result.ReturnValue -eq 0) { Write-Host "[OK] Terminated PID $($Proc.ProcessId)" -ForegroundColor Green }
+
+        } catch { Write-Error "Failed to terminate: $($_.Exception.Message)" }
+
+    }
+
+}
+
+function Clear-NetworkFabric {
+
+    if (-not (Test-IsAdmin)) { Write-Warning "Network Fabric flushing requires elevation."; return }
+
+    Write-Section "Purging and Rebuilding Local Network Fabric"
+
+    Clear-DnsClientCache
+
+    Remove-NetNeighbor -AddressFamily IPv4, IPv6 -Confirm:$false -ErrorAction SilentlyContinue
+
+    Update-SmbBinding -ErrorAction SilentlyContinue | Out-Null
+
+    cmd.exe /c "ipconfig /release && ipconfig /renew"
+
+    netsh int ip reset | Out-Null
+
+    netsh winsock reset | Out-Null
+
+    Write-Host "[OK] Network Fabric reset complete." -ForegroundColor Green
+
+}
+
+function Optimize-StorageFabric {
+
+    if (-not (Test-IsAdmin)) { Write-Warning "Storage optimization requires administrative access."; return }
+
+    Write-Section "Optimizing Storage Subsystem & Volume Geometry"
+
+    $Volumes = Get-Volume | Where-Object { $_.DriveLetter -and $_.FileSystemLabel -notmatch 'Recovery' }
+
+    foreach ($Vol in $Volumes) {
+
+        Write-Host "[*] Optimizing Volume $($Vol.DriveLetter): [$($Vol.FileSystemType)]..." -ForegroundColor Cyan
+
+        try {
+
+            Optimize-Volume -DriveLetter $Vol.DriveLetter -Verbose
+
+            Write-Host "[✓] Volume $($Vol.DriveLetter): optimization completed." -ForegroundColor Green
+
+        } catch { Write-Warning "Could not optimize volume $($Vol.DriveLetter): $($_.Exception.Message)" }
+
+    }
+
+}
+
+function Get-HardwareFabric {
+
+    Write-Section "Hardware Fabric & Motherboard Telemetry"
+
+    Get-CimInstance Win32_BaseBoard | Select-Object Manufacturer, Product, SerialNumber, Version | Format-List
+
+    Get-CimInstance Win32_BIOS | Select-Object Manufacturer, Name, Version, ReleaseDate, SMBIOSBIOSVersion | Format-List
+
+    Get-CimInstance Win32_PhysicalMemory | Select-Object BankLabel, DeviceLocator, Capacity, Speed, Manufacturer | Format-Table -AutoSize
+
+}
+
+function Get-ProcessFabric {
+
+    if (-not (Test-IsAdmin)) { Write-Warning "Deep process profiling requires elevated access."; return }
+
+    Write-Section "Advanced Process Tree and Allocation Telemetry"
+
+    Get-CimInstance Win32_Process | Sort-Object WorkingSetSize -Descending | Select-Object -First 10 | ForEach-Object {
+
+        [PSCustomObject]@{ PID = $_.ProcessId; Name = $_.Name; MemoryMB = [Math]::Round($_.WorkingSetSize / 1MB, 2); ParentPID = $_.ParentProcessId; Executable = $_.ExecutablePath }
+
+    } | Format-Table -AutoSize
+
+}
+
+function Get-SystemFaults {
+
+    Write-Section "Recent System Log Errors and Infrastructure Faults"
+
+    $Faults = Get-WinEvent -FilterHashtable @{ LogName = 'System'; Level = 1, 2 } -MaxEvents 15 -ErrorAction SilentlyContinue
+
+    if ($Faults) {
+
+        $Faults | ForEach-Object {
+
+            [PSCustomObject]@{ TimeGenerated = $_.TimeCreated; Provider = $_.ProviderName; EventID = $_.Id; Summary = ($_.Message -replace "[\`r\`n]+", " ") }
+
+        } | Format-Table -Wrap
+
+    } else { Write-Host "[-] No critical hardware defaults or system faults found." -ForegroundColor Green }
+
+}
+
+function Invoke-SystemShell {
+
+    if (-not (Test-IsAdmin)) { Write-Warning "Requires Administrator."; return }
+
+    Write-Section "Escalating Session to NT AUTHORITY\SYSTEM"
+
+    $PsExecPaths = @("psexec.exe", "C:\AdminOps\psexec.exe", "C:\AdminOps\Tools\PsExec.exe", "C:\AdminOps\Tools\psexec.exe")
+
+    $FoundPath = $null
+
+    foreach ($Path in $PsExecPaths) {
+
+        $cmd = Get-Command $Path -ErrorAction SilentlyContinue
+
+        if ($cmd) { $FoundPath = $cmd.Source; break }
+
+        if (Test-Path $Path) { $FoundPath = $Path; break }
+
+    }
+
+    if (-not $FoundPath) { Write-Warning "PsExec.exe not found."; return }
+
+    Start-Process -FilePath $FoundPath -ArgumentList "-accepteula -i -s pwsh.exe -NoExit -ExecutionPolicy Bypass" -Verb RunAs
+
+}
+
+function Get-SystemDiagnostics {
+
+    if (-not (Test-IsAdmin)) { Write-Warning "Requires Administrator."; return }
+
+    Write-Section "System Performance & Hardware Fabric"
+
+    Get-Process | Sort-Object CPU -Descending | Select-Object -First 5 Name, Id, CPU, WorkingSet | Format-Table -AutoSize
+
+    Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID,
+
+        @{Name="SizeGB";Expression={[Math]::Round($_.Size/1GB,2)}}, @{Name="FreeGB";Expression={[Math]::Round($_.FreeSpace/1GB,2)}} | Format-Table -AutoSize
+
+    Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture, LastBootUpTime | Format-List
+
+}
+
+function Get-NetworkFabric {
+
+    Write-Section "Network Interface and Active Listener Profile"
+
+    Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object Name, InterfaceDescription, MacAddress, LinkSpeed | Format-Table -AutoSize
+
+    Get-NetTCPConnection -State Listen,Established -ErrorAction SilentlyContinue |
+
+        Select-Object LocalAddress, LocalPort, RemoteAddress, RemotePort, State, OwningProcess -First 25 | Format-Table -AutoSize
+
+}
+
+function Invoke-DeepSessionAudit {
+
+    if (-not (Test-IsAdmin)) { Write-Warning "Requires elevation."; return }
+
+    Write-Section "Active Interactive Session Audit"
+
+    Get-CimInstance Win32_LogonSession | Where-Object {$_.LogonType -eq 2 -or $_.LogonType -eq 10} | ForEach-Object {
+
+        $logon = $_
+
+        $user = Get-CimInstance -Query "Associators of {Win32_LogonSession.LogonId='$($logon.LogonId)'} Where AssocClass=Win32_LoggedOnUser" -ErrorAction SilentlyContinue
+
+        [PSCustomObject]@{ LogonId = $logon.LogonId; StartTime = $logon.StartTime; LogonType = $logon.LogonType; User = $user.Name; Domain = $user.Domain }
+
+    } | Format-Table -AutoSize
+
+}
+
+function Initialize-SQLStorageFabric {
+
+    param([Parameter(Mandatory)][ValidatePattern('^[a-zA-Z]$')][string]$DriveLetter)
+
+    if (-not (Test-IsAdmin)) { Write-Warning "Storage fabric provisioning requires elevation."; return }
+
+    $TargetRoot = "$($DriveLetter):\SQLData"
+
+    $Directories = @($TargetRoot, "$TargetRoot\Data", "$TargetRoot\Logs", "$TargetRoot\TempDB", "$TargetRoot\Backup")
+
+    Write-Section "Provisioning SQL Server Storage Fabric on Volume $($DriveLetter):"
+
+    foreach ($Dir in $Directories) {
+
+        if (-not (Test-Path $Dir)) { New-Item -Path $Dir -ItemType Directory -Force | Out-Null }
+
+    }
+
+    foreach ($Dir in $Directories) {
+
+        $Folder = Get-CimInstance Win32_Directory -Filter "Name='$($Dir -replace '\\\\', '\\\\\\\\')'"
+
+        if ($Folder.Compressed) { $null = Invoke-CimMethod -InputObject $Folder -MethodName "Uncompress" }
+
+    }
+
+    Write-Host "[✓] SQL Storage fabric prepared at $TargetRoot." -ForegroundColor Green
+
+}
+
+# ===================================================================
+
+# MASTER FABRIC ADD-ON LAYER
+
+# Storage / Services / Defender / Boot / Token / VHD / SQL / Aliases
+
+# ===================================================================
+
+function mm-volumes {
+
+    Write-Section "Volume Fabric"
+
+    Get-Volume |
+
+    Where-Object DriveLetter |
+
+    Sort-Object DriveLetter |
+
+    Select-Object DriveLetter,
+
+                  FileSystemLabel,
+
+                  FileSystem,
+
+                  HealthStatus,
+
+                  OperationalStatus,
+
+                  @{N='SizeGB';E={[math]::Round($_.Size/1GB,2)}},
+
+                  @{N='FreeGB';E={[math]::Round($_.SizeRemaining/1GB,2)}} |
+
+    Format-Table -AutoSize
+
+}
+
+function Get-ServiceFabric {
+
+    Write-Section "Service Fabric"
+
+    Get-Service |
+
+    Sort-Object Status,DisplayName |
+
+    Select-Object Status,Name,DisplayName |
+
+    Format-Table -AutoSize
+
+}
+
+function Get-DefenderFabric {
+
+    Write-Section "Microsoft Defender Fabric"
+
+    if (-not (Get-Command Get-MpComputerStatus -ErrorAction SilentlyContinue)) {
+
+        Write-Warning "Microsoft Defender cmdlets are not available."
+
         return
+
     }
 
-    try {
-        Add-Type -AssemblyName PresentationFramework
-        Add-Type -AssemblyName PresentationCore
-        Add-Type -AssemblyName WindowsBase
+    Get-MpComputerStatus |
 
-        $xaml = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        WindowStyle="None"
-        ResizeMode="NoResize"
-        AllowsTransparency="True"
-        Background="Black"
-        Topmost="True"
-        ShowInTaskbar="False"
-        Width="860"
-        Height="620"
-        WindowStartupLocation="CenterScreen">
-    <Grid Background="#020617">
-        <Border CornerRadius="18" BorderThickness="2" BorderBrush="#22D3EE" Margin="12">
-            <Grid>
-                <Image Name="LogoImage" Stretch="Uniform" Margin="20"/>
-                <Border Background="#2200FFFF" CornerRadius="18" Margin="12"/>
-                <TextBlock Text="A MACK PROJEKT"
-                           Foreground="#67E8F9"
-                           FontSize="28"
-                           FontWeight="Bold"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Bottom"
-                           Margin="0,0,0,22"/>
-            </Grid>
-        </Border>
-    </Grid>
-</Window>
-"@
+    Select-Object AMServiceEnabled,
 
-        [xml]$xml = $xaml
-        $reader = New-Object System.Xml.XmlNodeReader $xml
-        $window = [Windows.Markup.XamlReader]::Load($reader)
-        $img = $window.FindName("LogoImage")
+                  AntivirusEnabled,
 
-        $bitmap = New-Object System.Windows.Media.Imaging.BitmapImage
-        $bitmap.BeginInit()
-        $bitmap.UriSource = [Uri]::new($ImagePath)
-        $bitmap.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
-        $bitmap.EndInit()
-        $img.Source = $bitmap
+                  AntispywareEnabled,
 
-        $timer = New-Object System.Windows.Threading.DispatcherTimer
-        $timer.Interval = [TimeSpan]::FromMilliseconds($Milliseconds)
-        $timer.Add_Tick({
-            $timer.Stop()
-            $window.Close()
-        })
+                  RealTimeProtectionEnabled,
 
-        $window.Add_Loaded({
-            $timer.Start()
-        })
+                  BehaviorMonitorEnabled,
 
-        $null = $window.ShowDialog()
-    } catch {
-        # Silent fallback
-    }
+                  IoavProtectionEnabled,
+
+                  NISEnabled,
+
+                  IsTamperProtected,
+
+                  QuickScanAge,
+
+                  FullScanAge |
+
+    Format-List
+
 }
 
-function Show-AMPStartupSplash {
+function Get-BootFabric {
+
+    Write-Section "Boot / Shutdown / Kernel Power Fabric"
+
+    Get-WinEvent -FilterHashtable @{
+
+        LogName = 'System'
+
+        Id      = 41,6005,6006,6008,1074
+
+    } -MaxEvents 40 -ErrorAction SilentlyContinue |
+
+    Select-Object TimeCreated,
+
+                  Id,
+
+                  ProviderName,
+
+                  LevelDisplayName,
+
+                  Message |
+
+    Format-Table -Wrap -AutoSize
+
+}
+
+function Get-TokenFabric {
+
+    Write-Section "Current Security Token Fabric"
+
+    whoami /all
+
+}
+
+function Get-VHDFabric {
+
+    Write-Section "Mounted VHD / Disk Image Fabric"
+
+    if (-not (Get-Command Get-DiskImage -ErrorAction SilentlyContinue)) {
+
+        Write-Warning "Get-DiskImage is unavailable. Hyper-V PowerShell module may not be present."
+
+        return
+
+    }
+
+    Get-DiskImage |
+
+    Where-Object Attached |
+
+    Select-Object ImagePath,
+
+                  Attached,
+
+                  StorageType,
+
+                  DevicePath |
+
+    Format-Table -AutoSize
+
+}
+
+function Get-DiskFabric {
+
+    Write-Section "Physical Disk / Partition Fabric"
+
+    Get-Disk |
+
+    Select-Object Number,
+
+                  FriendlyName,
+
+                  SerialNumber,
+
+                  BusType,
+
+                  PartitionStyle,
+
+                  OperationalStatus,
+
+                  HealthStatus,
+
+                  @{N='SizeGB';E={[math]::Round($_.Size/1GB,2)}} |
+
+    Format-Table -AutoSize
+
+    Write-Host ""
+
+    Write-Host "--- Partitions ---" -ForegroundColor Cyan
+
+    Get-Partition |
+
+    Select-Object DiskNumber,
+
+                  PartitionNumber,
+
+                  DriveLetter,
+
+                  Type,
+
+                  @{N='SizeGB';E={[math]::Round($_.Size/1GB,2)}} |
+
+    Format-Table -AutoSize
+
+}
+
+function Get-PathFabric {
+
     param(
-        [string]$LogoPath = "C:\AMP\AMP LOGO.jpeg",
-        [switch]$UseImageFirst
+
+        [string]$Path = "C:\\"
+
     )
 
-    $ascii = @(
-'                         /\                                  ',
-'                        /  \                                 ',
-'                       / /\ \                                ',
-'                      / /  \ \                               ',
-'                     /_/____\_\                              ',
-'                     \ \    / /                              ',
-'                      \ \  / /                               ',
-'                       \ \/ /                                ',
-'                        \  /                                 ',
-'                         \/                                  ',
-'                                                             ',
-'            █████╗     ███╗   ███╗  █████╗   ██████╗  ██╗  ██╗',
-'           ██╔══██╗    ████╗ ████║ ██╔══██╗ ██╔════╝ ██║ ██╔╝',
-'           ███████║    ██╔████╔██║ ███████║ ██║      █████╔╝ ',
-'           ██╔══██║    ██║╚██╔╝██║ ██╔══██║ ██║      ██╔═██╗ ',
-'           ██║  ██║    ██║ ╚═╝ ██║ ██║  ██║ ╚██████╗ ██║  ██╗',
-'           ╚═╝  ╚═╝    ╚═╝     ╚═╝ ╚═╝  ╚═╝  ╚═════╝ ╚═╝  ╚═╝',
-'                                                             ',
-'                   ██████╗ ██████╗  ██████╗      ██╗███████╗',
-'                   ██╔══██╗██╔══██╗██╔═══██╗     ██║██╔════╝',
-'                   ██████╔╝██████╔╝██║   ██║     ██║█████╗  ',
-'                   ██╔═══╝ ██╔══██╗██║   ██║██   ██║██╔══╝  ',
-'                   ██║     ██║  ██║╚██████╔╝╚█████╔╝███████╗',
-'                   ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚════╝ ╚══════╝',
-'                                                             ',
-'                                 ██╗  ██╗████████╗          ',
-'                                 ██║ ██╔╝╚══██╔══╝          ',
-'                                 █████╔╝    ██║             ',
-'                                 ██╔═██╗    ██║             ',
-'                                 ██║  ██╗   ██║             ',
-'                                 ╚═╝  ╚═╝   ╚═╝             '
-    )
+    Write-Section "Path Fabric Size Map: $Path"
 
-    $palettes = @(
-        @('Cyan','Blue','Magenta','White'),
-        @('Magenta','Cyan','Blue','White'),
-        @('Blue','Magenta','Cyan','White'),
-        @('White','Cyan','Magenta','Blue'),
-        @('DarkCyan','Cyan','Magenta','DarkBlue')
-    )
+    if (-not (Test-Path $Path)) {
 
-    $bannerLines = @(
-        '▓▓▓ BOOTING MACK PROJEKT INTERFACE ▓▓▓',
-        '▓▓▓ LOADING GRID ▓▓▓',
-        '▓▓▓ CHARGING CYBER CORE ▓▓▓',
-        '▓▓▓ AUTH STATUS: ONLINE ▓▓▓'
-    )
+        Write-Warning "Path not found: $Path"
 
-    $oldTitle = $Host.UI.RawUI.WindowTitle
+        return
 
-    try {
-        if ($UseImageFirst) {
-            Show-AMPImagePopup -ImagePath $LogoPath -Milliseconds 2200
+    }
+
+    Get-ChildItem $Path -Force -ErrorAction SilentlyContinue |
+
+    ForEach-Object {
+
+        $size = if ($_.PSIsContainer) {
+            $measure = Get-ChildItem -LiteralPath $_.FullName -File -Recurse -Force -ErrorAction SilentlyContinue |
+                Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue
+            if ($measure -and $null -ne $measure.Sum) { [double]$measure.Sum } else { 0 }
+        } else {
+            if ($null -ne $_.Length) { [double]$_.Length } else { 0 }
         }
 
-        $frames = 8
-        for ($f = 0; $f -lt $frames; $f++) {
-            $Host.UI.RawUI.WindowTitle = "A MACK PROJEKT :: CYBERPUNK INIT [$($f+1)/$frames]"
-            Show-AMPAsciiFrame -Art $ascii -Palette $palettes[$f % $palettes.Count]
+        [PSCustomObject]@{
 
-            Write-Host ""
-            Write-Centered $bannerLines[$f % $bannerLines.Count] (($palettes[$f % $palettes.Count])[0])
-            Start-Sleep -Milliseconds 140
+            Name   = $_.Name
+
+            Path   = $_.FullName
+
+            Type   = if ($_.PSIsContainer) { "Folder" } else { "File" }
+
+            SizeGB = [math]::Round(($size / 1GB), 2)
+
         }
 
-        for ($i = 0; $i -lt 3; $i++) {
-            Clear-Host
-            Start-Sleep -Milliseconds 70
-            Show-AMPAsciiFrame -Art $ascii -Palette @('Magenta','Cyan','White','Blue')
-            Write-Host ""
-            Write-Centered ">>> JACKING INTO MACK GRID <<<" "Magenta"
-            Start-Sleep -Milliseconds 90
+    } |
+
+    Sort-Object SizeGB -Descending |
+
+    Format-Table -AutoSize
+
+}
+
+function Get-StartupFabric {
+
+    Write-Section "Startup Fabric"
+
+    Get-CimInstance Win32_StartupCommand |
+
+    Select-Object Name,
+
+                  Command,
+
+                  Location,
+
+                  User |
+
+    Format-Table -Wrap -AutoSize
+
+}
+
+function Get-TaskFabric {
+
+    Write-Section "Scheduled Task Fabric"
+
+    Get-ScheduledTask |
+
+    Where-Object State -ne 'Disabled' |
+
+    Select-Object TaskName,
+
+                  TaskPath,
+
+                  State |
+
+    Sort-Object TaskPath,TaskName |
+
+    Format-Table -AutoSize
+
+}
+
+function Get-NetworkRouteFabric {
+
+    Write-Section "Network Route / DNS Fabric"
+
+    Write-Host "--- DNS Servers ---" -ForegroundColor Cyan
+
+    Get-DnsClientServerAddress |
+
+    Where-Object AddressFamily -eq 2 |
+
+    Select-Object InterfaceAlias,ServerAddresses |
+
+    Format-Table -AutoSize
+
+    Write-Host ""
+
+    Write-Host "--- Routes ---" -ForegroundColor Cyan
+
+    Get-NetRoute -AddressFamily IPv4 |
+
+    Sort-Object RouteMetric |
+
+    Select-Object DestinationPrefix,
+
+                  NextHop,
+
+                  InterfaceAlias,
+
+                  RouteMetric |
+
+    Format-Table -AutoSize
+
+}
+
+function Get-SQLFabric {
+
+    Write-Section "SQL Server Fabric"
+
+    Get-Service |
+
+    Where-Object {
+
+        $_.Name -match '^MSSQL|^SQL' -or
+
+        $_.DisplayName -match 'SQL Server'
+
+    } |
+
+    Select-Object Status,
+
+                  Name,
+
+                  DisplayName |
+
+    Format-Table -AutoSize
+
+}
+
+function Backup-SQLFabric {
+
+    param(
+
+        [string]$BackupRoot = "C:\AdminOps\SQLBackups"
+
+    )
+
+    Write-Section "SQL Backup Fabric"
+
+    New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null
+
+    Write-Host "Backup root prepared:" -ForegroundColor Green
+
+    Write-Host $BackupRoot
+
+    Write-Warning "This prepares the backup folder only. Actual database backup requires sqlcmd/dbatools and database names."
+
+}
+
+function Move-TempDBFabric {
+
+    param(
+
+        [Parameter(Mandatory)]
+
+        [ValidatePattern('^[a-zA-Z]$')]
+
+        [string]$DriveLetter
+
+    )
+
+    Write-Section "SQL TempDB Move Fabric"
+
+    $Target = "$($DriveLetter):\SQLData\TempDB"
+
+    New-Item -ItemType Directory -Path $Target -Force | Out-Null
+
+    Write-Host "TempDB target prepared:" -ForegroundColor Green
+
+    Write-Host $Target
+
+    Write-Warning "This prepares the TempDB path only. SQL ALTER DATABASE commands still need to be run for your SQL instance."
+
+}
+
+function Test-MasterMackProfile {
+
+    Write-Section "MasterMack Profile Self-Test"
+
+    $Checks = @(
+
+        "Test-IsAdmin",
+
+        "Ensure-Elevated",
+
+        "Write-Section",
+
+        "AdminOpsMode",
+
+        "Invoke-SafeDriveCleanup",
+
+        "Optimize-StorageFabric",
+
+        "Get-SystemDiagnostics",
+
+        "Get-NetworkFabric",
+
+        "Invoke-DeepSessionAudit",
+
+        "Invoke-DeepFileAudit",
+
+        "Get-HardwareFabric",
+
+        "Get-ProcessFabric",
+
+        "Get-SystemFaults",
+
+        "Invoke-SystemShell",
+
+        "Initialize-SQLStorageFabric",
+
+        "mm-volumes",
+
+        "Get-ServiceFabric",
+
+        "Get-DefenderFabric",
+
+        "Get-BootFabric",
+
+        "Get-TokenFabric",
+
+        "Get-VHDFabric",
+
+        "Get-DiskFabric",
+
+        "Get-PathFabric",
+
+        "Get-StartupFabric",
+
+        "Get-TaskFabric",
+
+        "Get-NetworkRouteFabric",
+
+        "Get-SQLFabric"
+
+    )
+
+    $Checks | ForEach-Object {
+
+        $Name = $_
+
+        $exists = Get-Command $Name -ErrorAction SilentlyContinue
+
+        [PSCustomObject]@{
+
+            Command = $Name
+
+            Loaded  = [bool]$exists
+
+            Type    = if ($exists) { $exists.CommandType } else { "Missing" }
+
         }
+
+    } | Format-Table -AutoSize
+
+}
+
+# ---------------------------
+
+# Add-on aliases
+
+# ---------------------------
+
+Set-Alias vol mm-volumes
+
+Set-Alias sys Get-SystemDiagnostics
+
+Set-Alias netfab Get-NetworkFabric
+
+Set-Alias procfab Get-ProcessFabric
+
+Set-Alias faults Get-SystemFaults
+
+Set-Alias defender Get-DefenderFabric
+
+Set-Alias bootlog Get-BootFabric
+
+Set-Alias token Get-TokenFabric
+
+Set-Alias vhd Get-VHDFabric
+
+Set-Alias disks Get-DiskFabric
+
+Set-Alias paths Get-PathFabric
+
+Set-Alias startup Get-StartupFabric
+
+Set-Alias tasks Get-TaskFabric
+
+Set-Alias routes Get-NetworkRouteFabric
+
+Set-Alias sqlfab Get-SQLFabric
+
+Set-Alias selftest Test-MasterMackProfile
+
+function Invoke-DeepFileAudit {
+
+    if (-not (Test-IsAdmin)) { Write-Warning "Deep file auditing requires raw system access tokens."; return }
+
+    Write-Section "LOW-LEVEL ARTIFACT INSPECTION: FILE TRANSFERS & EGRESS"
+
+    $JournalInfo = fsutil usn queryjournal C:
+
+    $FirstUsn = ($JournalInfo | Select-String "First USN" | ForEach-Object { $_.ToString().Split(':')[-1].Trim() })
+
+    if ($FirstUsn) {
+
+        $RawJournal = fsutil usn readjournal C: startusn=$FirstUsn csv 2>$null | Select-Object -First 200
+
+        $ParsedEntries = foreach ($Line in $RawJournal) {
+
+            if ($Line -match "^[0-9a-fA-FxX]+,") {
+
+                $Fields = $Line.Split(',')
+
+                if ($Fields.Count -ge 6) {
+
+                    $ReasonReadable = switch -regex ($Fields[4].Trim()) { "0x00000001" { "File Created" } "0x00000002" { "Data Extended" } "0x00000004" { "Data Overwritten" } "0x00002000" { "File Renamed" } "0x00008000" { "File Deleted" } default { "Modified" } }
+
+                    [PSCustomObject]@{ Timestamp = $Fields[3].Trim(); Action = $ReasonReadable; FileName = $Fields[5].Trim().Replace('"', '') }
+
+                }
+
+            }
+
+        }
+
+        if ($ParsedEntries) { $ParsedEntries | Where-Object { $_.FileName -notmatch '\\.(tmp|log|ini|inf|evtx|pf)$' -and $_.FileName -notmatch '^(NTUSER|UsrClass|SystemVolumeInformation)' } | Select-Object -First 20 | Format-Table -AutoSize }
+
+    }
+
+}
+
+function AdminOpsMode {
+
+    [CmdletBinding(DefaultParameterSetName = "Status")]
+
+    param(
+
+        [Parameter(ParameterSetName = "Enable")] [switch]$Enable,
+
+        [Parameter(ParameterSetName = "Disable")] [switch]$Disable,
+
+        [Parameter(ParameterSetName = "Status")] [switch]$Status,
+
+        [Parameter()] [string]$OpsPath = "C:\AdminOps",
+
+        [Parameter()] [string[]]$ExclusionProcesses = @(),
+
+        [Parameter()] [switch]$IncludeExtensionExclusions,
+
+        [Parameter()] [string[]]$ExclusionExtensions = @()
+
+    )
+
+    if (-not (Ensure-Elevated -Purpose "AdminOpsMode")) { return }
+
+    $script:OpsPath = $OpsPath
+
+    Write-Section "Admin Ops Mode - Controlled Defender Exclusions"
+
+    Write-MackLog "AdminOpsMode invoked. ParameterSet=$($PSCmdlet.ParameterSetName)"
+
+    try { $null = Get-MpComputerStatus -ErrorAction Stop } catch { Write-Error "Windows Defender unavailable."; return }
+
+    New-Item -Path $OpsPath -ItemType Directory -Force | Out-Null
+
+    function Show-Status {
+
+        Write-Section "Current Defender & Exclusion Status"
+
+        $s = Get-MpComputerStatus; $p = Get-MpPreference
+
+        Write-Host ("ComputerName              : {0}" -f $env:COMPUTERNAME)
+
+        Write-Host ("RealTimeProtectionEnabled : {0}" -f $s.RealTimeProtectionEnabled)
+
+        Write-Host ("TamperProtection          : {0}" -f $s.IsTamperProtected)
 
         Write-Host ""
-        Write-Centered "[OK] Neon shell initialized" "Green"
-        Write-Centered "[OK] Visual layer loaded" "Green"
-        Write-Centered "[OK] A MACK PROJEKT online" "Green"
-        Start-Sleep -Milliseconds 500
-        Clear-Host
+
+        Write-Host "Exclusion Paths:"
+
+        if ($p.ExclusionPath) { $p.ExclusionPath | ForEach-Object { Write-Host "  - $_" } } else { Write-Host "  (none)" }
+
     }
-    finally {
-        $Host.UI.RawUI.WindowTitle = $oldTitle
-    }
-}
 
-# -----------------------------
-# CALL THIS ON PROFILE STARTUP
-# -----------------------------
-Show-AMPStartupSplash -LogoPath "C:\AMP\AMP LOGO.jpeg" -UseImageFirst
+    function Add-Exclusions {
 
-# ----------------
-# Override toggles
-# ----------------
-$debug_Override           = $false
-$repo_root_Override       = $null
-$timeFilePath_Override    = $null
-$updateInterval_Override  = $null
-$EDITOR_Override          = $null
+        $pref = Get-MpPreference
 
-### PowerShell Profile Refactor
-### Version 1.05 - Divine Edition
+        if ($pref.ExclusionPath -notcontains $OpsPath) { Add-MpPreference -ExclusionPath $OpsPath }
 
-$debug = if ($null -ne $debug_Override) { [bool]$debug_Override } else { $false }
+        foreach ($proc in $ExclusionProcesses) {
 
-#################################################################################################################################
-############                                                                                                         ############
-############                                          !!!   WARNING:   !!!                                           ############
-############                                                                                                         ############
-############                DO NOT MODIFY THIS FILE. THIS FILE IS HASHED AND UPDATED AUTOMATICALLY.                  ############
-############                    ANY CHANGES MADE TO THIS FILE WILL BE OVERWRITTEN BY COMMITS TO                      ############
-############                       https://github.com/ChrisTitusTech/powershell-profile.git.                         ############
-############                                                                                                         ############
-############                      TO ADD YOUR OWN CODE OR OVERRIDES, USE Edit-Profile                                ############
-############                                                                                                         ############
-#################################################################################################################################
+            $pref = Get-MpPreference
 
-# ----------------
-# Core defaults
-# ----------------
-if ($null -ne $repo_root_Override -and $repo_root_Override -ne '') {
-    $repo_root = $repo_root_Override
-} else {
-    $repo_root = "https://raw.githubusercontent.com/ChrisTitusTech"
-}
+            if ($pref.ExclusionProcess -notcontains $proc) { Add-MpPreference -ExclusionProcess $proc }
 
-function Get-ProfileDir {
-    if ($PSVersionTable.PSEdition -eq "Core") {
-        return ([Environment]::GetFolderPath("MyDocuments") + "\PowerShell")
-    } elseif ($PSVersionTable.PSEdition -eq "Desktop") {
-        return ([Environment]::GetFolderPath("MyDocuments") + "\WindowsPowerShell")
-    } else {
-        throw "Unsupported PowerShell edition: $($PSVersionTable.PSEdition)"
-    }
-}
-
-if ($null -ne $timeFilePath_Override -and $timeFilePath_Override -ne '') {
-    $timeFilePath = $timeFilePath_Override
-} else {
-    $profileDir = Get-ProfileDir
-    $timeFilePath = Join-Path $profileDir "LastExecutionTime.txt"
-}
-
-if ($null -ne $updateInterval_Override) {
-    $updateInterval = [int]$updateInterval_Override
-} else {
-    $updateInterval = 7
-}
-
-function Debug-Message {
-    if (Get-Command -Name "Debug-Message_Override" -ErrorAction SilentlyContinue) {
-        Debug-Message_Override
-    } else {
-        Write-Host "#######################################" -ForegroundColor Red
-        Write-Host "#           Debug mode enabled        #" -ForegroundColor Red
-        Write-Host "#          ONLY FOR DEVELOPMENT       #" -ForegroundColor Red
-        Write-Host "#                                     #" -ForegroundColor Red
-        Write-Host "#       IF YOU ARE NOT DEVELOPING     #" -ForegroundColor Red
-        Write-Host "#       JUST RUN `Update-Profile`     #" -ForegroundColor Red
-        Write-Host "#        to discard all changes       #" -ForegroundColor Red
-        Write-Host "#   and update to the latest profile  #" -ForegroundColor Red
-        Write-Host "#               version               #" -ForegroundColor Red
-        Write-Host "#######################################" -ForegroundColor Red
-    }
-}
-
-if ($debug) {
-    Debug-Message
-}
-
-# Opt-out of telemetry before doing anything, only if PowerShell is run as SYSTEM
-try {
-    if ([bool]([System.Security.Principal.WindowsIdentity]::GetCurrent()).IsSystem) {
-        [System.Environment]::SetEnvironmentVariable(
-            'POWERSHELL_TELEMETRY_OPTOUT',
-            'true',
-            [System.EnvironmentVariableTarget]::Machine
-        )
-    }
-} catch {
-    Write-Verbose "Unable to set telemetry opt-out: $_"
-}
-
-# ----------------
-# Connectivity
-# ----------------
-function Test-GitHubConnection {
-    try {
-        if ($PSVersionTable.PSEdition -eq "Core") {
-            return Test-Connection github.com -Count 1 -Quiet -TimeoutSeconds 1
-        } else {
-            $ping = New-Object System.Net.NetworkInformation.Ping
-            $result = $ping.Send("github.com", 1000)
-            return ($result.Status -eq "Success")
-        }
-    } catch {
-        return $false
-    }
-}
-$global:canConnectToGitHub = Test-GitHubConnection
-
-# ----------------
-# Modules / External Profiles
-# ----------------
-try {
-    if (Get-Module -ListAvailable -Name Terminal-Icons) {
-        Import-Module -Name Terminal-Icons -ErrorAction SilentlyContinue
-    } else {
-        Write-Verbose "Terminal-Icons not installed; skipping import."
-    }
-} catch {
-    Write-Verbose "Terminal-Icons import skipped: $_"
-}
-
-$ChocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-if (Test-Path $ChocolateyProfile) {
-    try {
-        Import-Module $ChocolateyProfile -ErrorAction SilentlyContinue
-    } catch {
-        Write-Verbose "Chocolatey profile import skipped: $_"
-    }
-}
-
-# Safely read last execution date
-$lastExecRaw = if (Test-Path $timeFilePath) {
-    try {
-        (Get-Content -Path $timeFilePath -Raw -ErrorAction Stop).Trim()
-    } catch {
-        $null
-    }
-} else {
-    $null
-}
-
-[Nullable[datetime]]$lastExec = $null
-if (-not [string]::IsNullOrWhiteSpace($lastExecRaw)) {
-    [datetime]$parsed = [datetime]::MinValue
-    if ([datetime]::TryParseExact(
-        $lastExecRaw,
-        'yyyy-MM-dd',
-        $null,
-        [System.Globalization.DateTimeStyles]::None,
-        [ref]$parsed
-    )) {
-        $lastExec = $parsed
-    }
-}
-
-# ----------------
-# Profile Updating
-# ----------------
-function Update-Profile {
-    if (Get-Command -Name "Update-Profile_Override" -ErrorAction SilentlyContinue) {
-        Update-Profile_Override
-    } else {
-        try {
-            if (-not $global:canConnectToGitHub) {
-                Write-Verbose "GitHub unreachable; skipping profile update."
-                return
-            }
-
-            $url = "$repo_root/powershell-profile/main/Microsoft.PowerShell_profile.ps1"
-            $tempProfile = Join-Path $env:TEMP "Microsoft.PowerShell_profile.ps1"
-
-            if (-not (Test-Path $PROFILE)) {
-                New-Item -ItemType File -Path $PROFILE -Force | Out-Null
-            }
-
-            $oldhash = Get-FileHash $PROFILE -ErrorAction SilentlyContinue
-            Invoke-RestMethod $url -OutFile $tempProfile -ErrorAction Stop
-            $newhash = Get-FileHash $tempProfile -ErrorAction Stop
-
-            if ($null -eq $oldhash -or $newhash.Hash -ne $oldhash.Hash) {
-                Copy-Item -Path $tempProfile -Destination $PROFILE -Force
-                Write-Host "Profile has been updated. Please restart your shell to reflect changes." -ForegroundColor Magenta
-            } else {
-                Write-Host "Profile is up to date." -ForegroundColor Green
-            }
-        } catch {
-            Write-Verbose "Unable to check for profile updates: $_"
-        } finally {
-            Remove-Item (Join-Path $env:TEMP "Microsoft.PowerShell_profile.ps1") -ErrorAction SilentlyContinue
-        }
-    }
-}
-
-if (
-    -not $debug -and (
-        $updateInterval -eq -1 -or
-        -not (Test-Path $timeFilePath) -or
-        $null -eq $lastExec -or
-        ((Get-Date) - $lastExec).TotalDays -gt $updateInterval
-    )
-) {
-    Update-Profile
-    try {
-        $currentTime = Get-Date -Format 'yyyy-MM-dd'
-        $currentTime | Out-File -FilePath $timeFilePath -Force
-    } catch {
-        Write-Verbose "Unable to write profile execution timestamp: $_"
-    }
-} elseif ($debug) {
-    Write-Warning "Skipping profile update check in debug mode"
-}
-
-function Update-PowerShell {
-    if (Get-Command -Name "Update-PowerShell_Override" -ErrorAction SilentlyContinue) {
-        Update-PowerShell_Override
-    } else {
-        try {
-            if (-not $global:canConnectToGitHub) {
-                Write-Verbose "GitHub unreachable; skipping PowerShell update check."
-                return
-            }
-
-            if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-                Write-Verbose "winget not found; skipping PowerShell update check."
-                return
-            }
-
-            Write-Host "Checking for PowerShell updates..." -ForegroundColor Cyan
-            $updateNeeded = $false
-            $currentVersion = $PSVersionTable.PSVersion.ToString()
-            $gitHubApiUrl = "https://api.github.com/repos/PowerShell/PowerShell/releases/latest"
-            $latestReleaseInfo = Invoke-RestMethod -Uri $gitHubApiUrl -ErrorAction Stop
-            $latestVersion = $latestReleaseInfo.tag_name.Trim('v')
-
-            if ([version]$currentVersion -lt [version]$latestVersion) {
-                $updateNeeded = $true
-            }
-
-            if ($updateNeeded) {
-                Write-Host "Updating PowerShell..." -ForegroundColor Yellow
-                Start-Process powershell.exe `
-                    -ArgumentList "-NoProfile -Command winget upgrade Microsoft.PowerShell --accept-source-agreements --accept-package-agreements" `
-                    -Wait -NoNewWindow
-                Write-Host "PowerShell has been updated. Please restart your shell to reflect changes." -ForegroundColor Magenta
-            } else {
-                Write-Host "Your PowerShell is up to date." -ForegroundColor Green
-            }
-        } catch {
-            Write-Verbose "Failed to update PowerShell: $_"
-        }
-    }
-}
-
-if (
-    -not $debug -and (
-        $updateInterval -eq -1 -or
-        -not (Test-Path $timeFilePath) -or
-        $null -eq $lastExec -or
-        ((Get-Date).Date - $lastExec.Date).TotalDays -gt $updateInterval
-    )
-) {
-    Update-PowerShell
-    try {
-        $currentTime = Get-Date -Format 'yyyy-MM-dd'
-        $currentTime | Out-File -FilePath $timeFilePath -Force
-    } catch {
-        Write-Verbose "Unable to write PowerShell execution timestamp: $_"
-    }
-} elseif ($debug) {
-    Write-Warning "Skipping PowerShell update in debug mode"
-}
-
-function Clear-Cache {
-    if (Get-Command -Name "Clear-Cache_Override" -ErrorAction SilentlyContinue) {
-        Clear-Cache_Override
-    } else {
-        Write-Host "Clearing cache..." -ForegroundColor Cyan
-
-        Write-Host "Clearing Windows Prefetch..." -ForegroundColor Yellow
-        Remove-Item -Path "$env:SystemRoot\Prefetch\*" -Force -ErrorAction SilentlyContinue
-
-        Write-Host "Clearing Windows Temp..." -ForegroundColor Yellow
-        Remove-Item -Path "$env:SystemRoot\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-
-        Write-Host "Clearing User Temp..." -ForegroundColor Yellow
-        Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
-
-        Write-Host "Clearing Internet Explorer Cache..." -ForegroundColor Yellow
-        Remove-Item -Path "$env:LOCALAPPDATA\Microsoft\Windows\INetCache\*" -Recurse -Force -ErrorAction SilentlyContinue
-
-        Write-Host "Cache clearing completed." -ForegroundColor Green
-    }
-}
-
-# ----------------
-# Admin Check and Prompt
-# ----------------
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).
-    IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-
-function prompt {
-    if ($isAdmin) {
-        "[" + (Get-Location) + "] # "
-    } else {
-        "[" + (Get-Location) + "] $ "
-    }
-}
-
-$adminSuffix = if ($isAdmin) { " [ADMIN]" } else { "" }
-$Host.UI.RawUI.WindowTitle = "PowerShell {0}$adminSuffix" -f $PSVersionTable.PSVersion.ToString()
-
-# ----------------
-# Utility Functions
-# ----------------
-function Test-CommandExists {
-    param($command)
-    return ($null -ne (Get-Command $command -ErrorAction SilentlyContinue))
-}
-
-# ----------------
-# Editor Configuration
-# ----------------
-if ($null -ne $EDITOR_Override -and $EDITOR_Override -ne '') {
-    $EDITOR = $EDITOR_Override
-} else {
-    $EDITOR = if (Test-CommandExists nvim) { 'nvim' }
-    elseif (Test-CommandExists pvim) { 'pvim' }
-    elseif (Test-CommandExists vim) { 'vim' }
-    elseif (Test-CommandExists vi) { 'vi' }
-    elseif (Test-CommandExists code) { 'code' }
-    elseif (Test-CommandExists codium) { 'codium' }
-    elseif (Test-CommandExists 'notepad++') { 'notepad++' }
-    elseif (Test-CommandExists sublime_text) { 'sublime_text' }
-    else { 'notepad' }
-
-    Set-Alias -Name vim -Value $EDITOR -ErrorAction SilentlyContinue
-}
-
-function Edit-Profile {
-    & $EDITOR $PROFILE.CurrentUserAllHosts
-}
-Set-Alias -Name ep -Value Edit-Profile
-
-function Invoke-Profile {
-    if ($PSVersionTable.PSEdition -eq "Desktop") {
-        Write-Host "Note: Some Oh My Posh/PSReadLine limitations may appear in Windows PowerShell 5.1." -ForegroundColor Yellow
-    }
-    & $PROFILE
-}
-
-function touch($file) { "" | Out-File $file -Encoding ASCII }
-function ff($name) {
-    Get-ChildItem -Recurse -Filter "*${name}*" -ErrorAction SilentlyContinue | ForEach-Object {
-        Write-Output $_.FullName
-    }
-}
-
-# ----------------
-# Network Utilities
-# ----------------
-function pubip {
-    try {
-        (Invoke-WebRequest http://ifconfig.me/ip -UseBasicParsing -ErrorAction Stop).Content
-    } catch {
-        Write-Error "Unable to retrieve public IP: $_"
-    }
-}
-
-# ----------------
-# WinUtil
-# ----------------
-function winutil {
-    try {
-        Invoke-Expression (Invoke-RestMethod https://christitus.com/win)
-    } catch {
-        Write-Error "Failed to launch winutil: $_"
-    }
-}
-
-function winutildev {
-    if (Get-Command -Name "WinUtilDev_Override" -ErrorAction SilentlyContinue) {
-        WinUtilDev_Override
-    } else {
-        try {
-            Invoke-Expression (Invoke-RestMethod https://christitus.com/windev)
-        } catch {
-            Write-Error "Failed to launch winutildev: $_"
-        }
-    }
-}
-
-# ----------------
-# System Utilities
-# ----------------
-function admin {
-    if ($args.Count -gt 0) {
-        $argList = $args -join ' '
-        Start-Process wt -Verb RunAs -ArgumentList "pwsh.exe -NoExit -Command $argList"
-    } else {
-        Start-Process wt -Verb RunAs
-    }
-}
-Set-Alias -Name su -Value admin
-
-function uptime {
-    try {
-        $dateFormat = [System.Globalization.CultureInfo]::CurrentCulture.DateTimeFormat.ShortDatePattern
-        $timeFormat = [System.Globalization.CultureInfo]::CurrentCulture.DateTimeFormat.LongTimePattern
-
-        if ($PSVersionTable.PSVersion.Major -eq 5) {
-            $lastBoot = (Get-WmiObject win32_operatingsystem).LastBootUpTime
-            $bootTime = [System.Management.ManagementDateTimeConverter]::ToDateTime($lastBoot)
-            $lastBoot = $bootTime.ToString("$dateFormat $timeFormat")
-        } else {
-            $bootTime = Get-Uptime -Since
-            $lastBoot = $bootTime.ToString("$dateFormat $timeFormat")
         }
 
-        $formattedBootTime = $bootTime.ToString("dddd, MMMM dd, yyyy HH:mm:ss", [System.Globalization.CultureInfo]::InvariantCulture) + " [$lastBoot]"
-        Write-Host "System started on: $formattedBootTime" -ForegroundColor DarkGray
+        if ($IncludeExtensionExclusions) {
 
-        $uptime = (Get-Date) - $bootTime
-        Write-Host ("Uptime: {0} days, {1} hours, {2} minutes, {3} seconds" -f $uptime.Days, $uptime.Hours, $uptime.Minutes, $uptime.Seconds) -ForegroundColor Blue
-    } catch {
-        Write-Error "An error occurred while retrieving system uptime."
-    }
-}
+            foreach ($ext in $ExclusionExtensions) {
 
-function unzip($file) {
-    Write-Output ("Extracting", $file, "to", $pwd)
-    $fullFile = Get-ChildItem -Path $pwd -Filter $file | ForEach-Object { $_.FullName }
-    Expand-Archive -Path $fullFile -DestinationPath $pwd -Force
-}
+                $pref = Get-MpPreference
 
-function hb {
-    if ($args.Length -eq 0) {
-        Write-Error "No file path specified."
-        return
-    }
+                if ($pref.ExclusionExtension -notcontains $ext.TrimStart(".")) { Add-MpPreference -ExclusionExtension $ext.TrimStart(".") }
 
-    $FilePath = $args[0]
-
-    if (Test-Path $FilePath) {
-        $Content = Get-Content $FilePath -Raw
-    } else {
-        Write-Error "File path does not exist."
-        return
-    }
-
-    $uri = "http://bin.christitus.com/documents"
-    try {
-        $response = Invoke-RestMethod -Uri $uri -Method Post -Body $Content -ErrorAction Stop
-        $hasteKey = $response.key
-        $url = "http://bin.christitus.com/$hasteKey"
-        Set-Clipboard $url
-        Write-Output "$url copied to clipboard."
-    } catch {
-        Write-Error "Failed to upload the document. Error: $_"
-    }
-}
-
-function grep($regex, $dir) {
-    if ($dir) {
-        Get-ChildItem $dir | Select-String $regex
-        return
-    }
-    $input | Select-String $regex
-}
-
-function df { Get-Volume }
-
-function sed($file, $find, $replace) {
-    (Get-Content $file).Replace("$find", $replace) | Set-Content $file
-}
-
-function which($name) {
-    Get-Command $name | Select-Object -ExpandProperty Definition
-}
-
-function export($name, $value) {
-    Set-Item -Force -Path "env:$name" -Value $value
-}
-
-function pkill($name) {
-    Get-Process $name -ErrorAction SilentlyContinue | Stop-Process
-}
-
-function pgrep($name) {
-    Get-Process $name -ErrorAction SilentlyContinue
-}
-
-function head {
-    param($Path, $n = 10)
-    Get-Content $Path -Head $n
-}
-
-function tail {
-    param($Path, $n = 10, [switch]$f = $false)
-    Get-Content $Path -Tail $n -Wait:$f
-}
-
-function nf { param($name) New-Item -ItemType File -Path . -Name $name }
-
-function mkcd {
-    param($dir)
-    New-Item -ItemType Directory -Path $dir -Force | Out-Null
-    Set-Location $dir
-}
-
-function trash($path) {
-    try {
-        $fullPath = (Resolve-Path -Path $path -ErrorAction Stop).Path
-
-        if (Test-Path $fullPath) {
-            $item = Get-Item $fullPath
-
-            if ($item.PSIsContainer) {
-                $parentPath = $item.Parent.FullName
-            } else {
-                $parentPath = $item.DirectoryName
             }
 
-            $shell = New-Object -ComObject 'Shell.Application'
-            $shellItem = $shell.NameSpace($parentPath).ParseName($item.Name)
-
-            if ($shellItem) {
-                $shellItem.InvokeVerb('delete')
-                Write-Host "Item '$fullPath' has been moved to the Recycle Bin."
-            } else {
-                Write-Host "Error: Could not find the item '$fullPath' to trash."
-            }
-        } else {
-            Write-Host "Error: Item '$fullPath' does not exist."
-        }
-    } catch {
-        Write-Host "Error: $_"
-    }
-}
-
-# ----------------
-# Quality of Life Aliases
-# ----------------
-function docs {
-    $docs = if ([Environment]::GetFolderPath("MyDocuments")) {
-        [Environment]::GetFolderPath("MyDocuments")
-    } else {
-        "$HOME\Documents"
-    }
-    Set-Location -Path $docs
-}
-
-function dtop {
-    $dtop = if ([Environment]::GetFolderPath("Desktop")) {
-        [Environment]::GetFolderPath("Desktop")
-    } else {
-        "$HOME\Documents"
-    }
-    Set-Location -Path $dtop
-}
-
-function k9 { Stop-Process -Name $args[0] -ErrorAction SilentlyContinue }
-
-function la { Get-ChildItem | Format-Table -AutoSize }
-function ll { Get-ChildItem -Force | Format-Table -AutoSize }
-
-# ----------------
-# Git Shortcuts
-# ----------------
-function gs { git status }
-function ga { git add . }
-function gc { param($m) git commit -m "$m" }
-function gpush { git push }
-function gpull { git pull }
-
-function g {
-    if (Get-Command __zoxide_z -ErrorAction SilentlyContinue) {
-        __zoxide_z github
-    } else {
-        Write-Host "zoxide is not available." -ForegroundColor Yellow
-    }
-}
-
-function gcl { git clone "$args" }
-
-function gcom {
-    git add .
-    git commit -m "$args"
-}
-
-function lazyg {
-    git add .
-    git commit -m "$args"
-    git push
-}
-
-function sysinfo { Get-ComputerInfo }
-
-function flushdns {
-    Clear-DnsClientCache
-    Write-Host "DNS has been flushed"
-}
-
-function cpy { Set-Clipboard $args[0] }
-function pst { Get-Clipboard }
-
-# ----------------
-# PSReadLine Compatibility
-# ----------------
-function Set-PSReadLineOptionsCompat {
-    param([hashtable]$Options)
-
-    if (-not (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue)) {
-        return
-    }
-
-    if ($PSVersionTable.PSEdition -eq "Core") {
-        Set-PSReadLineOption @Options
-    } else {
-        $SafeOptions = $Options.Clone()
-        $SafeOptions.Remove('PredictionSource')
-        $SafeOptions.Remove('PredictionViewStyle')
-        Set-PSReadLineOption @SafeOptions
-    }
-}
-
-if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
-    $PSReadLineOptions = @{
-        EditMode = 'Windows'
-        HistoryNoDuplicates = $true
-        HistorySearchCursorMovesToEnd = $true
-        Colors = @{
-            Command   = '#87CEEB'
-            Parameter = '#98FB98'
-            Operator  = '#FFB6C1'
-            Variable  = '#DDA0DD'
-            String    = '#FFDAB9'
-            Number    = '#B0E0E6'
-            Type      = '#F0E68C'
-            Comment   = '#D3D3D3'
-            Keyword   = '#8367c7'
-            Error     = '#FF6347'
-        }
-        PredictionSource = 'History'
-        PredictionViewStyle = 'ListView'
-        BellStyle = 'None'
-    }
-
-    Set-PSReadLineOptionsCompat -Options $PSReadLineOptions
-
-    if (Get-Command Set-PSReadLineKeyHandler -ErrorAction SilentlyContinue) {
-        Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
-        Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
-        Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+d' -Function DeleteChar
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+w' -Function BackwardDeleteWord
-        Set-PSReadLineKeyHandler -Chord 'Alt+d' -Function DeleteWord
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+LeftArrow' -Function BackwardWord
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+RightArrow' -Function ForwardWord
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+z' -Function Undo
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+y' -Function Redo
-    }
-
-    Set-PSReadLineOption -AddToHistoryHandler {
-        param($line)
-        $sensitive = @('password', 'secret', 'token', 'apikey', 'connectionstring')
-        $hasSensitive = $sensitive | Where-Object { $line -match $_ }
-        return ($null -eq $hasSensitive)
-    }
-}
-
-function Set-PredictionSource {
-    if (Get-Command -Name "Set-PredictionSource_Override" -ErrorAction SilentlyContinue) {
-        Set-PredictionSource_Override
-    } elseif (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
-        if ($PSVersionTable.PSEdition -eq "Core") {
-            Set-PSReadLineOption -PredictionSource HistoryAndPlugin -ErrorAction SilentlyContinue
-            Set-PSReadLineOption -MaximumHistoryCount 10000 -ErrorAction SilentlyContinue
-        } else {
-            Set-PSReadLineOption -MaximumHistoryCount 10000 -ErrorAction SilentlyContinue
-        }
-    }
-}
-Set-PredictionSource
-
-# ----------------
-# Argument Completion
-# ----------------
-$scriptblock = {
-    param($wordToComplete, $commandAst, $cursorPosition)
-    $customCompletions = @{
-        'git'    = @('status', 'add', 'commit', 'push', 'pull', 'clone', 'checkout')
-        'npm'    = @('install', 'start', 'run', 'test', 'build')
-        'deno'   = @('run', 'compile', 'bundle', 'test', 'lint', 'fmt', 'cache', 'info', 'doc', 'upgrade')
-    }
-
-    $command = $commandAst.CommandElements[0].Value
-    if ($customCompletions.ContainsKey($command)) {
-        $customCompletions[$command] |
-            Where-Object { $_ -like "$wordToComplete*" } |
-            ForEach-Object {
-                [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
-            }
-    }
-}
-Register-ArgumentCompleter -Native -CommandName git, npm, deno -ScriptBlock $scriptblock
-
-if (Get-Command dotnet -ErrorAction SilentlyContinue) {
-    $scriptblock = {
-        param($wordToComplete, $commandAst, $cursorPosition)
-        dotnet complete --position $cursorPosition $commandAst.ToString() |
-            ForEach-Object {
-                [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
-            }
-    }
-    Register-ArgumentCompleter -Native -CommandName dotnet -ScriptBlock $scriptblock
-}
-
-# ----------------
-# Theme Initialization
-# ----------------
-if (Get-Command -Name "Get-Theme_Override" -ErrorAction SilentlyContinue) {
-    Get-Theme_Override
-} else {
-    if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
-        $localThemePath = Join-Path (Get-ProfileDir) "cobalt2.omp.json"
-
-        if (-not (Test-Path $localThemePath) -and $global:canConnectToGitHub) {
-            $themeUrl = "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/cobalt2.omp.json"
-            try {
-                Invoke-RestMethod -Uri $themeUrl -OutFile $localThemePath -ErrorAction Stop
-                Write-Host "Downloaded missing Oh My Posh theme to $localThemePath"
-            } catch {
-                Write-Verbose "Failed to download theme file. Falling back skipped: $_"
-            }
         }
 
-        try {
-            if (Test-Path $localThemePath) {
-                oh-my-posh init pwsh --config $localThemePath | Invoke-Expression
-            }
-        } catch {
-            Write-Verbose "Oh My Posh init skipped: $_"
-        }
-    } else {
-        Write-Verbose "Oh My Posh not installed; skipping theme init."
     }
+
+    function Remove-Exclusions {
+
+        $pref = Get-MpPreference
+
+        if ($pref.ExclusionPath -contains $OpsPath) { Remove-MpPreference -ExclusionPath $OpsPath }
+
+    }
+
+    switch ($PSCmdlet.ParameterSetName) {
+
+        "Enable"  { Add-Exclusions; Show-Status }
+
+        "Disable" { Remove-Exclusions; Show-Status }
+
+        "Status"  { Show-Status }
+
+    }
+
 }
 
-# ----------------
-# zoxide
-# ----------------
+function mm-admin { Start-Process pwsh -Verb RunAs }
+
+function mm-edit-profile { notepad $PROFILE }
+
+function mm-reload-profile { . $PROFILE }
+
+function mm-profile-path { $PROFILE | Select-Object * }
+
+function mm-home { Set-Location $HOME }
+
+function mm-tools { Set-Location "C:\MackTools" }
+
+function mm-adminops { Set-Location "C:\AdminOps" }
+
+function mm-c { Set-Location "C:\\" }
+
+function mm-ip { Get-NetIPAddress | Where-Object AddressFamily -eq IPv4 | Select-Object InterfaceAlias,IPAddress,PrefixLength | Format-Table -AutoSize }
+
+function mm-flushdns { ipconfig /flushdns }
+
+function mm-path { $env:Path -split ';' | Sort-Object }
+
+function mm-which { param([Parameter(Mandatory)][string]$Name) Get-Command $Name -ErrorAction SilentlyContinue | Select-Object Source,Version,CommandType }
+
+function mm-size {
+    param([string]$Path = ".")
+
+    Get-ChildItem -LiteralPath $Path -Force -ErrorAction SilentlyContinue |
+    ForEach-Object {
+        if ($_.PSIsContainer) {
+            $measure = Get-ChildItem -LiteralPath $_.FullName -File -Recurse -Force -ErrorAction SilentlyContinue |
+                Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue
+            $size = if ($measure -and $null -ne $measure.Sum) { [double]$measure.Sum } else { 0 }
+        }
+        else {
+            $size = if ($null -ne $_.Length) { [double]$_.Length } else { 0 }
+        }
+
+        [PSCustomObject]@{
+            Name   = $_.Name
+            Path   = $_.FullName
+            SizeGB = [math]::Round(($size / 1GB), 2)
+        }
+    } |
+    Sort-Object SizeGB -Descending |
+    Format-Table -AutoSize
+}
+
+function mm-croot { Get-ChildItem C:\ -Directory -Force | Sort-Object Name | Select-Object Name,FullName }
+
+function mm-vbox { $VBoxManage = "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe"; if (Test-Path $VBoxManage) { & $VBoxManage list vms } }
+
+function mm-tail { if (Get-Command tailscale -ErrorAction SilentlyContinue) { tailscale status; tailscale ip -4 } }
+
+function mm-git-status { git status }
+
+Set-Alias ll Get-ChildItem
+
+Set-Alias admin mm-admin
+
+Set-Alias editp mm-edit-profile
+
+Set-Alias reloadp mm-reload-profile
+
+Set-Alias croot mm-croot
+
+Set-Alias flushdns mm-flushdns
+
+if (Get-Module -ListAvailable -Name Terminal-Icons) { Import-Module Terminal-Icons }
+
 if (Get-Command zoxide -ErrorAction SilentlyContinue) {
+
     try {
-        Invoke-Expression (& { (zoxide init --cmd z powershell | Out-String) })
-    } catch {
-        Write-Verbose "zoxide init skipped: $_"
-    }
-} else {
-    Write-Verbose "zoxide not installed; skipping init."
+
+        $zoxideInit = zoxide init powershell 2>$null | Out-String
+
+        if ($zoxideInit) { Invoke-Expression $zoxideInit }
+
+    } catch { Write-Verbose "zoxide initialization skipped: $($_.Exception.Message)" }
+
 }
 
-# ----------------
-# Help
-# ----------------
-function Show-Help {
-    $usePSStyle = $null -ne (Get-Variable PSStyle -ErrorAction SilentlyContinue)
-
-    if ($usePSStyle) {
-        $cCyan    = $PSStyle.Foreground.Cyan
-        $cYellow  = $PSStyle.Foreground.Yellow
-        $cGreen   = $PSStyle.Foreground.Green
-        $cMagenta = $PSStyle.Foreground.Magenta
-        $cReset   = $PSStyle.Reset
-    } else {
-        $cCyan = ''
-        $cYellow = ''
-        $cGreen = ''
-        $cMagenta = ''
-        $cReset = ''
-    }
-
-    $helpText = @"
-${cCyan}PowerShell Profile Help${cReset}
-${cYellow}=======================${cReset}
-${cGreen}Edit-Profile${cReset} - Opens the current user's profile for editing using the configured editor.
-${cGreen}Update-Profile${cReset} - Checks for profile updates from a remote repository and updates if necessary.
-${cGreen}Update-PowerShell${cReset} - Checks for the latest PowerShell release and updates if a new version is available.
-
-${cCyan}Git Shortcuts${cReset}
-${cYellow}=======================${cReset}
-${cGreen}g${cReset} - Changes to the GitHub directory.
-${cGreen}ga${cReset} - Shortcut for 'git add .'.
-${cGreen}gc${cReset} <message> - Shortcut for 'git commit -m'.
-${cGreen}gcl${cReset} <repo> - Shortcut for 'git clone'.
-${cGreen}gcom${cReset} <message> - Adds all changes and commits with the specified message.
-${cGreen}gpull${cReset} - Shortcut for 'git pull'.
-${cGreen}gpush${cReset} - Shortcut for 'git push'.
-${cGreen}gs${cReset} - Shortcut for 'git status'.
-
-${cCyan}Shortcuts${cReset}
-${cYellow}=======================${cReset}
-${cGreen}cpy${cReset} <text> - Copies the specified text to the clipboard.
-${cGreen}df${cReset} - Displays information about volumes.
-${cGreen}docs${cReset} - Changes the current directory to the user's Documents folder.
-${cGreen}dtop${cReset} - Changes the current directory to the user's Desktop folder.
-${cGreen}ep${cReset} - Opens the profile for editing.
-${cGreen}export${cReset} <name> <value> - Sets an environment variable.
-${cGreen}ff${cReset} <name> - Finds files recursively with the specified name.
-${cGreen}flushdns${cReset} - Clears the DNS cache.
-${cGreen}pubip${cReset} - Retrieves the public IP address of the machine.
-${cGreen}grep${cReset} <regex> [dir] - Searches for a regex pattern.
-${cGreen}hb${cReset} <file> - Uploads the specified file's content to a hastebin-like service and returns the URL.
-${cGreen}head${cReset} <path> [n] - Displays the first n lines of a file.
-${cGreen}k9${cReset} <name> - Kills a process by name.
-${cGreen}la${cReset} - Lists all files in the current directory.
-${cGreen}ll${cReset} - Lists all files, including hidden, in the current directory.
-${cGreen}mkcd${cReset} <dir> - Creates and changes to a new directory.
-${cGreen}nf${cReset} <name> - Creates a new file with the specified name.
-${cGreen}pgrep${cReset} <name> - Lists processes by name.
-${cGreen}pkill${cReset} <name> - Kills processes by name.
-${cGreen}pst${cReset} - Retrieves text from the clipboard.
-${cGreen}sed${cReset} <file> <find> <replace> - Replaces text in a file.
-${cGreen}sysinfo${cReset} - Displays detailed system information.
-${cGreen}tail${cReset} <path> [n] - Displays the last n lines of a file.
-${cGreen}touch${cReset} <file> - Creates a new empty file.
-${cGreen}unzip${cReset} <file> - Extracts a zip file to the current directory.
-${cGreen}uptime${cReset} - Displays the system uptime.
-${cGreen}which${cReset} <name> - Shows the path of the command.
-${cGreen}winutil${cReset} - Runs the latest WinUtil full-release script.
-${cGreen}winutildev${cReset} - Runs the latest WinUtil pre-release script.
-
-Use '${cMagenta}Show-Help${cReset}' to display this help message.
-"@
-    Write-Host $helpText
-}
-
-if (Test-Path "$PSScriptRoot\CTTcustom.ps1") {
-    try {
-        Invoke-Expression -Command "& `"$PSScriptRoot\CTTcustom.ps1`""
-    } catch {
-        Write-Verbose "CTTcustom.ps1 failed to load: $_"
-    }
-}
+# Prompt initialization is performed after the Command Center functions load.
 
 try {
-    if ($null -ne (Get-Variable PSStyle -ErrorAction SilentlyContinue)) {
-        Write-Host "$($PSStyle.Foreground.Yellow)Use 'Show-Help' to display help$($PSStyle.Reset)"
-    } else {
-        Write-Host "Use 'Show-Help' to display help" -ForegroundColor Yellow
+
+    $hashPath   = $Global:MackProfileMeta.HashFile
+
+    $profilePath = $Global:MackProfileMeta.ProfilePath
+
+    if ((Test-Path -LiteralPath $profilePath) -and -not (Test-Path -LiteralPath $hashPath)) {
+
+        (Get-FileHash -LiteralPath $profilePath -Algorithm SHA256).Hash | Out-File -LiteralPath $hashPath
+
     }
-} catch {
-    Write-Host "Use 'Show-Help' to display help" -ForegroundColor Yellow
+
+} catch {}
+
+function Get-VBoxFabric {
+
+    Write-Section "VirtualBox Network Fabric"
+
+    Get-NetAdapter |
+
+    Where-Object {
+
+        $_.Name -match "VirtualBox|VBox"
+
+    } |
+
+    Format-Table Name,Status,LinkSpeed -AutoSize
+
 }
+
+function Get-DriverFaultFabric {
+
+    Write-Section "Driver Fault Fabric"
+
+    Get-WinEvent -FilterHashtable @{
+
+        LogName='System'
+
+        Level=1,2
+
+    } -MaxEvents 50 -ErrorAction SilentlyContinue |
+
+    Where-Object {
+
+        $_.ProviderName -match "VBox|Kernel|Service Control|NDIS"
+
+    } |
+
+    Select-Object TimeCreated,
+
+                  ProviderName,
+
+                  Id,
+
+                  Message |
+
+    Format-Table -Wrap -AutoSize
+
+}
+
+function Get-BugcheckFabric {
+
+    Write-Section "Bugcheck Fabric"
+
+    Get-WinEvent -FilterHashtable @{
+
+        LogName='System'
+
+        Id=41,1001
+
+    } -MaxEvents 20 -ErrorAction SilentlyContinue |
+
+    Format-Table TimeCreated,ProviderName,Id,Message -Wrap
+
+}
+
+function Get-EventFabric {
+
+    Write-Section "Recent Event Fabric"
+
+    Get-WinEvent -LogName System -MaxEvents 100 |
+
+    Select-Object TimeCreated,
+
+                  ProviderName,
+
+                  Id,
+
+                  LevelDisplayName |
+
+    Format-Table -AutoSize
+
+}
+
+function Get-USBFabric {
+
+    Write-Section "USB Device Fabric"
+
+    Get-PnpDevice |
+
+    Where-Object InstanceId -match "^USB" |
+
+    Select-Object Status,
+
+                  Class,
+
+                  FriendlyName,
+
+                  InstanceId |
+
+    Format-Table -Wrap -AutoSize
+
+}
+
+function Get-VMFabric {
+
+    Write-Section "Virtual Machine Fabric"
+
+    if (Get-Command VBoxManage -ErrorAction SilentlyContinue) {
+
+        VBoxManage list vms
+
+    }
+
+}
+
+function Get-MemoryFabric {
+
+    Write-Section "Memory Fabric"
+
+    Get-Counter '\Memory\Available MBytes',
+
+                '\Memory\Committed Bytes' |
+
+    Select -Expand CounterSamples |
+
+    Format-Table Path,CookedValue -Auto
+
+}
+
+function Get-PagefileFabric {
+
+    Write-Section "Pagefile Fabric"
+
+    Get-CimInstance Win32_PageFileUsage |
+
+    Format-Table Name,
+
+                 AllocatedBaseSize,
+
+                 CurrentUsage,
+
+                 PeakUsage -Auto
+
+}
+
+function Get-DefenderThreatFabric {
+
+    Write-Section "Defender Threat Fabric"
+
+    Get-MpThreatDetection -ErrorAction SilentlyContinue |
+
+    Select InitialDetectionTime,
+
+           ThreatName,
+
+           Resources |
+
+    Format-Table -Wrap
+
+}
+
+function Get-UpdateFabric {
+
+    Write-Section "Windows Update Fabric"
+
+    Get-HotFix |
+
+    Sort InstalledOn -Descending |
+
+    Select -First 25 |
+
+    Format-Table InstalledOn,
+
+                 HotFixID,
+
+                 Description -Auto
+
+}
+
+Set-Alias vboxfab Get-VBoxFabric
+
+Set-Alias drvfab Get-DriverFaultFabric
+
+Set-Alias bugfab Get-BugcheckFabric
+
+Set-Alias eventfab Get-EventFabric
+
+Set-Alias usbfab Get-USBFabric
+
+Set-Alias vmfab Get-VMFabric
+
+Set-Alias memfab Get-MemoryFabric
+
+Set-Alias pagefab Get-PagefileFabric
+
+Set-Alias threatfab Get-DefenderThreatFabric
+
+Set-Alias updatefab Get-UpdateFabric
+
+
+
+# Optional modules are imported only when already installed. Profiles should never
+
+# perform network installs or require elevation during shell startup.
+
+if (Get-Module -ListAvailable -Name Az.Tools.Migration) {
+
+    Import-Module Az.Tools.Migration -ErrorAction SilentlyContinue
+
+}
+
+if (Get-Module -ListAvailable -Name PSReadLine) {
+
+    Import-Module PSReadLine -ErrorAction SilentlyContinue
+
+    if ($Host.Name -eq 'ConsoleHost' -and [Environment]::UserInteractive -and -not [Console]::IsOutputRedirected) {
+
+        Set-PSReadLineOption -HistoryNoDuplicates -PredictionSource History -PredictionViewStyle ListView -ErrorAction SilentlyContinue
+
+        Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete -ErrorAction SilentlyContinue
+
+    }
+
+}
+
+# ===================================================================
+
+# MASTERMACK 6.1 COMMAND CENTER
+
+# Dashboard / health score / parallel audit / reports / smart prompt
+
+# ===================================================================
+
+$script:MackStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+$script:MackLocations = [ordered]@{
+
+    AdminOps = 'C:\AdminOps'
+
+    Tools    = 'C:\MackTools'
+
+    Profile  = Split-Path -Parent $PROFILE.CurrentUserAllHosts
+
+    Desktop  = [Environment]::GetFolderPath('Desktop')
+
+    Docs     = [Environment]::GetFolderPath('MyDocuments')
+
+}
+
+function Get-MackUptime {
+
+    $os = Get-CimInstance Win32_OperatingSystem
+
+    $elapsed = (Get-Date) - $os.LastBootUpTime
+
+    [PSCustomObject]@{
+
+        BootTime = $os.LastBootUpTime
+
+        Days     = $elapsed.Days
+
+        Hours    = $elapsed.Hours
+
+        Minutes  = $elapsed.Minutes
+
+        Display  = '{0}d {1}h {2}m' -f $elapsed.Days, $elapsed.Hours, $elapsed.Minutes
+
+    }
+
+}
+
+function Get-MackCommand {
+
+    [CmdletBinding()]
+
+    param([string]$Name = '*')
+
+    Get-Command -Name $Name -ErrorAction SilentlyContinue |
+
+        Where-Object { $_.Name -match '^(Get|Set|Test|Invoke|Clear|Initialize|Backup|Move|Start|Export)-.*Fabric|^mm-' } |
+
+        Sort-Object Name |
+
+        Select-Object Name, CommandType, ModuleName
+
+}
+
+function Get-MackHealth {
+
+    [CmdletBinding()]
+
+    param()
+
+    $os = Get-CimInstance Win32_OperatingSystem
+
+    $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
+
+    $defender = if (Get-Command Get-MpComputerStatus -ErrorAction SilentlyContinue) {
+
+        Get-MpComputerStatus -ErrorAction SilentlyContinue
+
+    }
+
+    $diskFree = if ($disk.Size) { [math]::Round(($disk.FreeSpace / $disk.Size) * 100, 1) } else { 0 }
+
+    $memoryFree = if ($os.TotalVisibleMemorySize) {
+
+        [math]::Round(($os.FreePhysicalMemory / $os.TotalVisibleMemorySize) * 100, 1)
+
+    } else { 0 }
+
+    $pendingReboot = (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or
+
+        (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired')
+
+    $defenderRealTime = if ($null -ne $defender) { [bool]$defender.RealTimeProtectionEnabled } else { $false }
+
+    $signatureAge = if ($null -ne $defender) { $defender.AntivirusSignatureAge } else { $null }
+
+    $checks = @(
+
+        [PSCustomObject]@{ Check='System drive free'; Passed=($diskFree -ge 15); Detail="$diskFree% free"; Weight=25 }
+
+        [PSCustomObject]@{ Check='Available memory'; Passed=($memoryFree -ge 15); Detail="$memoryFree% free"; Weight=15 }
+
+        [PSCustomObject]@{ Check='Defender real-time'; Passed=$defenderRealTime; Detail=[string]$defenderRealTime; Weight=25 }
+
+        [PSCustomObject]@{ Check='Defender signatures'; Passed=($null -ne $signatureAge -and $signatureAge -le 3); Detail="Age: $signatureAge day(s)"; Weight=20 }
+
+        [PSCustomObject]@{ Check='Pending reboot'; Passed=(-not $pendingReboot); Detail=[string]$pendingReboot; Weight=15 }
+
+    )
+
+    $score = ($checks | Where-Object Passed | Measure-Object Weight -Sum).Sum
+
+    [PSCustomObject]@{ Score=[int]$score; Grade=$(if($score -ge 90){'A'}elseif($score -ge 80){'B'}elseif($score -ge 70){'C'}else{'Needs attention'}); Checks=$checks }
+
+}
+
+function Show-MackDashboard {
+
+    [CmdletBinding()]
+
+    param([switch]$Detailed)
+
+    $health = Get-MackHealth
+
+    $uptime = Get-MackUptime
+
+    $os = Get-CimInstance Win32_OperatingSystem
+
+    $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+
+    $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
+
+    $admin = Test-IsAdmin
+
+    Write-Section "MACKPROJEKT-COMMANDCENTER | MasterMack 6.1"
+
+    Write-Host (' Health     : {0}/100 ({1})' -f $health.Score,$health.Grade) -ForegroundColor $(if($health.Score -ge 90){'Green'}elseif($health.Score -ge 70){'Yellow'}else{'Red'})
+
+    Write-Host (' Identity   : {0}\\{1}  |  Admin: {2}' -f $env:USERDOMAIN,$env:USERNAME,$admin)
+
+    Write-Host (' Platform   : {0}  |  PowerShell {1}' -f $os.Caption,$PSVersionTable.PSVersion)
+
+    Write-Host (' Processor  : {0}' -f $cpu.Name)
+
+    Write-Host (' Memory     : {0:N1} GB free / {1:N1} GB' -f ($os.FreePhysicalMemory/1MB),($os.TotalVisibleMemorySize/1MB))
+
+    Write-Host (' System C:  : {0:N1} GB free / {1:N1} GB' -f ($disk.FreeSpace/1GB),($disk.Size/1GB))
+
+    Write-Host (' Uptime     : {0}' -f $uptime.Display)
+
+    Write-Host (' Location   : {0}' -f (Get-Location))
+
+    if ($Detailed) { $health.Checks | Format-Table Check,Passed,Detail -AutoSize }
+
+}
+
+function Invoke-MackParallelAudit {
+
+    [CmdletBinding()]
+
+    param()
+
+    $jobs = [ordered]@{
+
+        OS = { Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,LastBootUpTime }
+
+        CPU = { Get-CimInstance Win32_Processor | Select-Object Name,LoadPercentage,NumberOfLogicalProcessors }
+
+        Disks = { Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | Select-Object DeviceID,Size,FreeSpace }
+
+        Network = { Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object Name,LinkSpeed,MacAddress }
+
+        Faults = { Get-WinEvent -FilterHashtable @{LogName='System';Level=1,2} -MaxEvents 10 -ErrorAction SilentlyContinue | Select-Object TimeCreated,Id,ProviderName,Message }
+
+        Startup = { Get-CimInstance Win32_StartupCommand | Select-Object Name,Command,User }
+
+    }
+
+    $output = [ordered]@{}
+
+    foreach ($entry in $jobs.GetEnumerator()) {
+
+        $output[$entry.Key] = Start-Job -ScriptBlock $entry.Value
+
+    }
+
+    foreach ($entry in @($output.GetEnumerator())) {
+
+        $output[$entry.Key] = Receive-Job -Job $entry.Value -Wait -AutoRemoveJob
+
+    }
+
+    [PSCustomObject]$output
+
+}
+
+function Export-MackSystemReport {
+
+    [CmdletBinding()]
+
+    param(
+
+        [string]$Path = (Join-Path ([Environment]::GetFolderPath('Desktop')) ("Mack-SystemReport-{0}.json" -f (Get-Date -Format 'yyyyMMdd-HHmmss')))
+
+    )
+
+    $parent = Split-Path -Parent $Path
+
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+
+    $report = [ordered]@{
+
+        GeneratedAt = (Get-Date).ToString('o')
+
+        ComputerName = $env:COMPUTERNAME
+
+        User = "$env:USERDOMAIN\\$env:USERNAME"
+
+        IsAdmin = Test-IsAdmin
+
+        Health = Get-MackHealth
+
+        Uptime = Get-MackUptime
+
+        Audit = Invoke-MackParallelAudit
+
+    }
+
+    $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $Path -Encoding utf8
+
+    Get-Item -LiteralPath $Path
+
+}
+
+function Test-MackNetwork {
+
+    [CmdletBinding()]
+
+    param([string]$Target = '1.1.1.1', [string]$DnsName = 'microsoft.com')
+
+    $gateway = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Sort-Object RouteMetric | Select-Object -First 1
+
+    [PSCustomObject]@{
+
+        AdapterUp = [bool](Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1)
+
+        Gateway = $gateway.NextHop
+
+        GatewayReachable = if ($gateway.NextHop) { Test-Connection $gateway.NextHop -Count 1 -Quiet } else { $false }
+
+        InternetReachable = Test-Connection $Target -Count 1 -Quiet
+
+        DnsResolved = [bool](Resolve-DnsName $DnsName -ErrorAction SilentlyContinue | Select-Object -First 1)
+
+    }
+
+}
+
+function Get-MackProfileBenchmark {
+
+    [CmdletBinding()]
+
+    param([ValidateRange(1,20)][int]$Runs = 3)
+
+    $shell = (Get-Process -Id $PID).Path
+
+    $times = for ($i=1; $i -le $Runs; $i++) {
+
+        (Measure-Command { & $shell -NoLogo -NoProfile -Command ". '$PROFILE'; exit" | Out-Null }).TotalMilliseconds
+
+    }
+
+    [PSCustomObject]@{
+
+        Runs=$Runs
+
+        AverageMs=[math]::Round(($times | Measure-Object -Average).Average,1)
+
+        FastestMs=[math]::Round(($times | Measure-Object -Minimum).Minimum,1)
+
+        SlowestMs=[math]::Round(($times | Measure-Object -Maximum).Maximum,1)
+
+    }
+
+}
+
+function Set-MackLocation {
+
+    [CmdletBinding()]
+
+    param([Parameter(Mandatory,Position=0)][string]$Name)
+
+    $match = $script:MackLocations.Keys | Where-Object { $_ -like "$Name*" } | Select-Object -First 1
+
+    if (-not $match) { throw "Unknown location '$Name'. Available: $($script:MackLocations.Keys -join ', ')" }
+
+    $target = $script:MackLocations[$match]
+
+    if (-not (Test-Path -LiteralPath $target)) { New-Item -ItemType Directory -Path $target -Force | Out-Null }
+
+    Set-Location -LiteralPath $target
+
+}
+
+function Initialize-MackPowerBar {
+    [CmdletBinding()]
+    param([switch]$ForceFallback)
+
+    if ($ForceFallback) {
+        Enable-MackPrompt
+        $script:MackPowerBarLoaded = $false
+        return
+    }
+
+    $OhMyPosh = Get-Command oh-my-posh -ErrorAction SilentlyContinue
+    if ($OhMyPosh) {
+        try {
+            $init = oh-my-posh init pwsh 2>$null | Out-String
+            if ($init) {
+                Invoke-Expression $init
+                $script:MackPowerBarLoaded = $true
+                return
+            }
+        }
+        catch {
+            Write-Warning "Oh My Posh initialization failed: $($_.Exception.Message)"
+        }
+    }
+
+    # Do not silently replace the user's PowerBar. The native Mack prompt
+    # remains available explicitly through: powerbar -ForceFallback
+    $script:MackPowerBarLoaded = $false
+}
+
+function Install-MackPowerBar {
+
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact='High')]
+
+    param([switch]$InstallNerdFont)
+
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { throw 'winget is required to install Oh My Posh.' }
+
+    if ($PSCmdlet.ShouldProcess('JanDeDobbeleer.OhMyPosh','Install or upgrade with winget')) {
+
+        winget install --id JanDeDobbeleer.OhMyPosh --source winget --accept-source-agreements --accept-package-agreements
+
+        if ($LASTEXITCODE -ne 0) {
+
+            winget upgrade --id JanDeDobbeleer.OhMyPosh --source winget --accept-source-agreements --accept-package-agreements
+
+        }
+
+    }
+
+    if ($InstallNerdFont -and (Get-Command oh-my-posh -ErrorAction SilentlyContinue) -and
+
+        $PSCmdlet.ShouldProcess('Meslo Nerd Font','Install font for PowerBar glyphs')) {
+
+        oh-my-posh font install meslo
+
+    }
+
+    Write-Host 'Restart the terminal, then set its font face to MesloLGM Nerd Font if installed.' -ForegroundColor Cyan
+
+}
+
+function Enable-MackPrompt {
+
+    $promptBlock = {
+
+        $lastExit = $global:LASTEXITCODE
+
+        $admin = if (Test-IsAdmin) { '#' } else { '$' }
+
+        $branch = ''
+
+        if (Get-Command git -ErrorAction SilentlyContinue) {
+
+            $gitBranch = git branch --show-current 2>$null
+
+            if ($gitBranch) { $branch = " git:$gitBranch" }
+
+        }
+
+        $leaf = Split-Path -Leaf (Get-Location)
+
+        if (-not $leaf) { $leaf = (Get-Location).Path }
+
+        $color = if ($lastExit -and $lastExit -ne 0) { 'Red' } else { 'Cyan' }
+
+        Write-Host "[$env:USERNAME@$env:COMPUTERNAME $leaf$branch]" -NoNewline -ForegroundColor $color
+
+        " $admin "
+
+    }
+
+    Set-Item -Path Function:\global:prompt -Value $promptBlock
+
+}
+
+function Update-MackTools {
+
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact='High')]
+
+    param([switch]$All)
+
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { throw 'winget is not installed.' }
+
+    if ($All -and $PSCmdlet.ShouldProcess('All eligible winget packages','Upgrade')) {
+
+        winget upgrade --all --include-unknown --accept-source-agreements --accept-package-agreements
+
+    } else {
+
+        winget upgrade
+
+    }
+
+}
+
+Register-ArgumentCompleter -CommandName Set-MackLocation -ParameterName Name -ScriptBlock {
+
+    param($commandName,$parameterName,$wordToComplete)
+
+    $script:MackLocations.Keys | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+
+        [System.Management.Automation.CompletionResult]::new($_,$_,'ParameterValue',$script:MackLocations[$_])
+
+    }
+
+}
+
+Set-Alias dashboard Show-MackDashboard
+
+Set-Alias health Get-MackHealth
+
+Set-Alias nettest Test-MackNetwork
+
+Set-Alias report Export-MackSystemReport
+
+Set-Alias benchp Get-MackProfileBenchmark
+
+Set-Alias cdm Set-MackLocation
+
+Set-Alias updateall Update-MackTools
+
+Set-Alias powerbar Initialize-MackPowerBar
+
+# Jan De Dobbeleer's PowerBar is the default. The native Git-aware prompt is
+
+# installed automatically when Oh My Posh is not yet available.
+
+
+# ===================================================================
+# MASTERMACK 6.1 :: MACKPROJEKT-COMMANDCENTER
+# ===================================================================
+$script:MackProjectRoot='C:\Users\donyalemack\MackEnterprises\Projekt-PS1'
+$script:MackBackupRoot=Join-Path $script:MackProjectRoot 'Backups'
+$script:MackReportRoot=Join-Path $script:MackProjectRoot 'Reports'
+$script:MackSnapshotRoot=Join-Path $script:MackProjectRoot 'Snapshots'
+$script:MackLogRoot=Join-Path $script:MackProjectRoot 'Logs'
+$script:MackFastfetch=Join-Path $HOME '.mackprojekt\terminal\fastfetch\config.jsonc'
+foreach($d in @($script:MackBackupRoot,$script:MackReportRoot,$script:MackSnapshotRoot,$script:MackLogRoot)){if(-not(Test-Path $d)){New-Item -ItemType Directory $d -Force -ErrorAction SilentlyContinue|Out-Null}}
+function Write-MackEvent{param([string]$Area='Core',[string]$Message,[string]$Level='Info');[ordered]@{Time=(Get-Date).ToString('o');Computer=$env:COMPUTERNAME;Area=$Area;Level=$Level;Message=$Message}|ConvertTo-Json -Compress|Add-Content (Join-Path $script:MackLogRoot ("MasterMack-{0}.jsonl"-f(Get-Date -Format yyyy-MM-dd)))}
+function Get-MackStorageCenter{param([string]$Path='C:\',[int]$Top=15);Write-Section 'Storage Command Center';Get-Volume|? DriveLetter|select DriveLetter,FileSystemLabel,HealthStatus,@{N='SizeGB';E={[math]::Round($_.Size/1GB,2)}},@{N='FreeGB';E={[math]::Round($_.SizeRemaining/1GB,2)}}|ft -Auto;Get-PathFabric -Path $Path}
+function Find-MackDuplicateFile{param([string]$Path=$HOME,[int]$MinMB=25);$f=gci $Path -File -Recurse -Force -ea SilentlyContinue|? Length -ge ($MinMB*1MB);$f|group Length|? Count -gt 1|%{$_.Group|%{try{[pscustomobject]@{Hash=(Get-FileHash $_.FullName).Hash;SizeMB=[math]::Round($_.Length/1MB,1);Path=$_.FullName}}catch{}}}|group Hash|? Count -gt 1|%{$_.Group}}
+function Get-MackMemoryCenter{Write-Section 'Memory / Performance';$o=gcim Win32_OperatingSystem;$p=gcim Win32_PageFileUsage -ea SilentlyContinue;[pscustomobject]@{TotalRAMGB=[math]::Round($o.TotalVisibleMemorySize/1MB,2);FreeRAMGB=[math]::Round($o.FreePhysicalMemory/1MB,2);UsedPct=[math]::Round(100*(1-$o.FreePhysicalMemory/$o.TotalVisibleMemorySize),1);PagefileMB=($p|measure AllocatedBaseSize -Sum).Sum}|fl;gps|sort WorkingSet64 -Desc|select -First 15 Name,Id,@{N='RAM_MB';E={[math]::Round($_.WorkingSet64/1MB,1)}},Handles,CPU|ft -Auto}
+function Get-MackNetworkCenter{Write-Section 'Network Command Center';Get-NetAdapter|? Status -eq Up|select Name,InterfaceDescription,LinkSpeed,MacAddress|ft -Auto;Get-DnsClientServerAddress -AddressFamily IPv4|? ServerAddresses|select InterfaceAlias,ServerAddresses|ft -Auto;Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ea SilentlyContinue|sort RouteMetric|select -First 3 NextHop,InterfaceAlias,RouteMetric|ft -Auto;if(gcm tailscale -ea SilentlyContinue){tailscale status};Get-NetTCPConnection -State Listen -ea SilentlyContinue|select -First 25 LocalAddress,LocalPort,OwningProcess|ft -Auto}
+function Get-MackSecurityCenter{
+    Write-Section 'Security Command Center'
+    if(gcm Get-MpComputerStatus -ea SilentlyContinue){Get-MpComputerStatus|select AntivirusEnabled,RealTimeProtectionEnabled,BehaviorMonitorEnabled,IsTamperProtected,AntivirusSignatureAge|fl}
+    $fw=Get-NetFirewallProfile -ea SilentlyContinue|select Name,Enabled,DefaultInboundAction,DefaultOutboundAction
+    if($fw){$fw|ft -Auto; if(-not($fw|? Enabled)){Write-Host 'Firewall state: DISABLED (informational; not scored as a MasterMack health fault)' -ForegroundColor Yellow}}
+    if(gcm Get-BitLockerVolume -ea SilentlyContinue){Get-BitLockerVolume|select MountPoint,VolumeStatus,ProtectionStatus,EncryptionMethod|ft -Auto}
+    [pscustomobject]@{SecureBoot=try{Confirm-SecureBootUEFI -ea Stop}catch{'Unavailable/Disabled'};TPM=try{(Get-Tpm -ea Stop).TpmReady}catch{'Unavailable'};Admin=Test-IsAdmin}|fl
+}
+function Get-MackDriverCenter{Write-Section 'Driver / PnP Command Center';Get-PnpDevice -PresentOnly -ea SilentlyContinue|? Status -ne OK|select Status,Class,FriendlyName,InstanceId|ft -Wrap -Auto;Get-WinEvent -FilterHashtable @{LogName='System';Id=41,1001,6008} -MaxEvents 15 -ea SilentlyContinue|select TimeCreated,Id,ProviderName,Message|ft -Wrap}
+function Resolve-MackTool{param([Parameter(Mandatory)][string]$Name,[string[]]$Candidates=@());$c=gcm $Name -ea SilentlyContinue|select -First 1;if($c){return $c.Source};foreach($x in $Candidates){$e=[Environment]::ExpandEnvironmentVariables($x);if(Test-Path -LiteralPath $e){return $e}};$null}
+function Get-MackDevCenter{
+    Write-Section 'Developer Toolchain'
+    $tools=[ordered]@{
+      git=@('%ProgramFiles%\Git\cmd\git.exe','%LOCALAPPDATA%\Programs\Git\cmd\git.exe');
+      gh=@('%ProgramFiles%\GitHub CLI\gh.exe'); az=@('%ProgramFiles%\Microsoft SDKs\Azure\CLI2\wbin\az.cmd');
+      dotnet=@('%ProgramFiles%\dotnet\dotnet.exe'); node=@('%ProgramFiles%\nodejs\node.exe'); npm=@('%ProgramFiles%\nodejs\npm.cmd');
+      python=@('%LOCALAPPDATA%\Programs\Python\Python313\python.exe','%LOCALAPPDATA%\Microsoft\WindowsApps\python.exe');
+      pip=@('%LOCALAPPDATA%\Programs\Python\Python313\Scripts\pip.exe'); winget=@('%LOCALAPPDATA%\Microsoft\WindowsApps\winget.exe');
+      docker=@('%ProgramFiles%\Docker\Docker\resources\bin\docker.exe'); code=@('%LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code.cmd'); pwsh=@('%ProgramFiles%\PowerShell\7\pwsh.exe')
+    }
+    foreach($kv in $tools.GetEnumerator()){$path=Resolve-MackTool $kv.Key $kv.Value;[pscustomobject]@{Tool=$kv.Key;Installed=[bool]$path;Path=$path}}
+}
+function Get-MackCloudCenter{Write-Section 'Azure / Microsoft 365';foreach($n in 'Az.Accounts','Microsoft.Graph','ExchangeOnlineManagement','MicrosoftTeams'){$m=Get-Module -ListAvailable $n|sort Version -Desc|select -First 1;[pscustomobject]@{Module=$n;Installed=[bool]$m;Version=if($m){$m.Version}else{$null}}}}
+function Get-MackPackageCenter{Write-Section 'Package Managers';foreach($n in 'winget','choco','scoop','npm','pip','dotnet'){$c=gcm $n -ea SilentlyContinue;[pscustomobject]@{Manager=$n;Available=[bool]$c;Source=if($c){$c.Source}else{$null}}}}
+function Repair-MackWindows{[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]param();if(-not(Test-IsAdmin)){Write-Warning 'Run elevated.';return};if($PSCmdlet.ShouldProcess('Windows','DISM RestoreHealth + SFC')){DISM.exe /Online /Cleanup-Image /RestoreHealth;sfc.exe /scannow}}
+function Repair-MackExplorer{[CmdletBinding(SupportsShouldProcess)]param();if($PSCmdlet.ShouldProcess('Explorer','Restart')){Stop-Process -Name explorer -Force -ea SilentlyContinue;Start-Process explorer.exe}}
+function Repair-MackNetwork{[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]param();if(-not(Test-IsAdmin)){Write-Warning 'Run elevated.';return};if($PSCmdlet.ShouldProcess('Network stack','Reset')){Clear-DnsClientCache -ea SilentlyContinue;netsh winsock reset;netsh int ip reset;Write-Warning 'Restart may be required.'}}
+function Repair-MackStore{[CmdletBinding(SupportsShouldProcess)]param();if($PSCmdlet.ShouldProcess('Store cache','Reset')){Start-Process wsreset.exe}}
+function Get-MackPendingReboot{[pscustomobject]@{CBS=Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending';WindowsUpdate=Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired';PendingFileRename=[bool](gp 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name PendingFileRenameOperations -ea SilentlyContinue)}}
+function Backup-MackProfile{$d=Join-Path $script:MackBackupRoot ("Microsoft.PowerShell_profile-{0}.ps1"-f(Get-Date -Format yyyyMMdd-HHmmss));cp $PROFILE $d -Force;gi $d}
+function Test-MackProfileSyntax{param([string]$Path=$PROFILE);$t=$null;$e=$null;[System.Management.Automation.Language.Parser]::ParseFile($Path,[ref]$t,[ref]$e)|Out-Null;if($e.Count){$e|select Message,@{N='Line';E={$_.Extent.StartLineNumber}},@{N='Text';E={$_.Extent.Text}}|ft -Wrap;return $false};Write-Host 'Profile syntax: VALID' -ForegroundColor Green;$true}
+function Restore-MackProfile{[CmdletBinding(SupportsShouldProcess,ConfirmImpact='High')]param([string]$Path);if(-not $Path){$Path=(gci $script:MackBackupRoot -Filter '*.ps1'|sort LastWriteTime -Desc|select -First 1).FullName};if(-not(Test-Path $Path)){throw 'No backup found.'};if($PSCmdlet.ShouldProcess($PROFILE,"Restore $Path")){cp $Path $PROFILE -Force}}
+function New-MackSnapshot{param([string]$Name=(Get-Date -Format yyyyMMdd-HHmmss));$p=Join-Path $script:MackSnapshotRoot "$Name.json";$d=[ordered]@{Generated=(Get-Date).ToString('o');Computer=$env:COMPUTERNAME;OS=gcim Win32_OperatingSystem|select Caption,Version,BuildNumber,LastBootUpTime;System=gcim Win32_ComputerSystem|select Manufacturer,Model,TotalPhysicalMemory;Disks=Get-Disk|select Number,FriendlyName,BusType,HealthStatus,Size;Volumes=Get-Volume|? DriveLetter|select DriveLetter,FileSystemLabel,HealthStatus,Size,SizeRemaining;Network=Get-NetAdapter|select Name,Status,MacAddress,LinkSpeed;Hotfixes=Get-HotFix|select HotFixID,InstalledOn};$d|ConvertTo-Json -Depth 6|sc $p -Encoding utf8;gi $p}
+function Compare-MackSnapshot{param([Parameter(Mandatory)][string]$Reference,[Parameter(Mandatory)][string]$Difference);$a=gc $Reference -Raw|ConvertFrom-Json;$b=gc $Difference -Raw|ConvertFrom-Json;Write-Section 'Snapshot Comparison';Compare-Object ($a.Volumes|ConvertTo-Json -Compress) ($b.Volumes|ConvertTo-Json -Compress);Compare-Object ($a.Network|ConvertTo-Json -Compress) ($b.Network|ConvertTo-Json -Compress);Compare-Object ($a.Hotfixes|ConvertTo-Json -Compress) ($b.Hotfixes|ConvertTo-Json -Compress)}
+function Show-MackFastfetch{param([ValidateSet('default','minimal','performance','network','admin','recovery')][string]$Mode='default');if(-not(gcm fastfetch -ea SilentlyContinue)){return};$p=Join-Path $HOME ".mackprojekt\terminal\fastfetch\$Mode.jsonc";if(Test-Path $p){fastfetch --config $p}elseif(Test-Path $script:MackFastfetch){fastfetch --config $script:MackFastfetch}else{fastfetch --logo none}}
+function Get-MackCommandCenterCommand{
+    $names=@('mack','Show-MackDashboard','Get-MackHealth','Get-MackStorageCenter','Find-MackDuplicateFile','Get-MackMemoryCenter','Get-MackNetworkCenter','Get-MackSecurityCenter','Get-MackDriverCenter','Get-MackDevCenter','Get-MackCloudCenter','Get-MackPackageCenter','Repair-MackWindows','Repair-MackExplorer','Repair-MackNetwork','Repair-MackStore','New-MackSnapshot','Compare-MackSnapshot','Backup-MackProfile','Restore-MackProfile','Test-MackProfileSyntax','Show-MackFastfetch')
+    $legacy=Get-MackCommand | Select-Object -ExpandProperty Name
+    @($names+$legacy)|Sort-Object -Unique|ForEach-Object{$c=gcm $_ -ea SilentlyContinue;if($c){[pscustomobject]@{Name=$c.Name;CommandType=$c.CommandType;ModuleName=$c.ModuleName}}}
+}
+$script:MackDisplayMode = 'compact'
+
+function Show-MackCommandPanel {
+    [CmdletBinding()]
+    param(
+        [ValidateSet('compact','full','off')]
+        [string]$Mode = $script:MackDisplayMode
+    )
+
+    $script:MackDisplayMode = $Mode
+    if ($Mode -eq 'off') { return }
+
+    Write-Host ''
+    Write-Host '── MASTERMACK 6.1 ───────────────────────────────────────────────────' -ForegroundColor DarkCyan
+
+    if ($Mode -eq 'compact') {
+        Write-Host ' COMMAND CENTER        SYSTEM              STORAGE' -ForegroundColor Cyan
+        Write-Host ' mack help             dashboard           mack storage'
+        Write-Host ' mack commands         health              disks / vol'
+        Write-Host ' mack report           sys                 paths'
+        Write-Host ''
+        Write-Host ' NETWORK               SECURITY            OPERATIONS' -ForegroundColor Cyan
+        Write-Host ' mack network          mack security       admin'
+        Write-Host ' nettest / routes      defender            editp / reloadp'
+        Write-Host ''
+        Write-Host ' REPAIR                PROFILE             MORE' -ForegroundColor Cyan
+        Write-Host ' mack repair           mack profile        mack snapshot'
+        Write-Host ' mack memory           mack dev            mack cloud'
+        Write-Host ''
+        Write-Host ' Type  mack help  for the complete command map.' -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host ' COMMAND CENTER' -ForegroundColor Cyan
+        Write-Host '   mack help | commands | dashboard | health | report | snapshot | compare'
+        Write-Host ' SYSTEM / PERFORMANCE' -ForegroundColor Cyan
+        Write-Host '   sys | faults | mack memory | memfab | pagefab | procfab | bootlog'
+        Write-Host ' STORAGE' -ForegroundColor Cyan
+        Write-Host '   mack storage | duplicates | vol | disks | paths | vhd'
+        Write-Host ' NETWORK' -ForegroundColor Cyan
+        Write-Host '   mack network | nettest | netfab | routes | mm-ip | mm-tail | flushdns'
+        Write-Host ' SECURITY' -ForegroundColor Cyan
+        Write-Host '   mack security | defender | threatfab | token'
+        Write-Host ' HARDWARE / DEVICES' -ForegroundColor Cyan
+        Write-Host '   drvfab | bugfab | eventfab | usbfab | vboxfab | vmfab'
+        Write-Host ' DEVELOPMENT / CLOUD' -ForegroundColor Cyan
+        Write-Host '   mack dev | cloud | packages | updates | updateall'
+        Write-Host ' REPAIR / PROFILE' -ForegroundColor Cyan
+        Write-Host '   mack repair windows|explorer|network|store'
+        Write-Host '   mack profile status|backup|rollback'
+        Write-Host ' DISPLAY' -ForegroundColor Cyan
+        Write-Host '   mack display compact|full|off'
+    }
+
+    Write-Host '──────────────────────────────────────────────────────────────────────' -ForegroundColor DarkCyan
+}
+
+function Show-MackHelp{Write-Host @'
+MACKPROJEKT-COMMANDCENTER :: MasterMack 6.1
+mack dashboard | health | storage | duplicates | memory | network | security | drivers
+mack dev | cloud | packages | updates | report | snapshot | compare | commands
+mack repair windows|explorer|network|store
+mack profile status|backup|rollback
+mack fastfetch default|minimal|performance|network|admin|recovery
+'@ -ForegroundColor Cyan}
+function mack{param([Parameter(Position=0)][string]$Area='help',[Parameter(Position=1)][string]$Action,[Parameter(ValueFromRemainingArguments)][string[]]$Args);switch($Area.ToLower()){display{Show-MackCommandPanel $(if($Action){$Action}else{'compact'})};help{Show-MackHelp};commands{Get-MackCommandCenterCommand};dashboard{Show-MackDashboard -Detailed:($Action -eq 'detailed')};health{Get-MackHealth};storage{Get-MackStorageCenter};duplicates{Find-MackDuplicateFile};memory{Get-MackMemoryCenter};network{Get-MackNetworkCenter};security{Get-MackSecurityCenter};drivers{Get-MackDriverCenter};dev{Get-MackDevCenter};cloud{Get-MackCloudCenter};packages{Get-MackPackageCenter};updates{Get-UpdateFabric};report{Export-MackSystemReport};snapshot{New-MackSnapshot -Name $(if($Action){$Action}else{Get-Date -Format yyyyMMdd-HHmmss})};compare{if($Action -and $Args){Compare-MackSnapshot $Action $Args[0]}else{Write-Warning 'mack compare <old.json> <new.json>'}};repair{switch($Action){windows{Repair-MackWindows};explorer{Repair-MackExplorer};network{Repair-MackNetwork};store{Repair-MackStore};default{Write-Warning 'windows|explorer|network|store'}}};profile{switch($Action){status{Test-MackProfileSyntax};backup{Backup-MackProfile};rollback{Restore-MackProfile};default{Write-Warning 'status|backup|rollback'}}};fastfetch{Show-MackFastfetch $(if($Action){$Action}else{'default'})};default{Show-MackHelp}}}
+
+# Single startup path: PowerShell 7 + PowerBar + Fastfetch
+try{$Host.UI.RawUI.WindowTitle='MACKPROJEKT-COMMANDCENTER | PowerShell 7'}catch{}
+Initialize-MackPowerBar
+if([Environment]::UserInteractive -and -not $env:MACK_PROFILE_QUIET){Show-MackFastfetch default; Show-MackCommandPanel compact}
