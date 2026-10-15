@@ -1,0 +1,44 @@
+name: PowerShell profile validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  syntax:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          $files = @(
+            'Microsoft.PowerShell_profile.ps1',
+            'profiles/MasterMack-6.1-DISPLAY.ps1',
+            'setup.ps1',
+            'install.ps1'
+          )
+          $failed = $false
+          foreach ($file in $files) {
+            if (-not (Test-Path $file)) {
+              Write-Error "Missing expected file: $file"
+              $failed = $true
+              continue
+            }
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file), [ref]$tokens, [ref]$errors
+            ) | Out-Null
+            if ($errors.Count) {
+              $failed = $true
+              Write-Host "::error file=$file::PowerShell parser found $($errors.Count) error(s)"
+              $errors | ForEach-Object {
+                Write-Host ("Line {0}: {1}" -f $_.Extent.StartLineNumber, $_.Message)
+              }
+            } else {
+              Write-Host "PASS: $file parses cleanly"
+            }
+          }
+          if ($failed) { exit 1 }
