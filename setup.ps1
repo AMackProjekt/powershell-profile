@@ -11,10 +11,11 @@ param(
     [switch]$SkipTools,
     [switch]$SkipModules,
     [switch]$SkipProfile,
-    [switch]$WhatIf
+    [switch]$WhatIf,
+    [string]$RepositoryRef = 'main'
 )
 $ErrorActionPreference = 'Stop'
-$RepoRaw = 'https://raw.githubusercontent.com/AMackProjekt/powershell-profile/main'
+$RepoRaw = "https://raw.githubusercontent.com/AMackProjekt/powershell-profile/$RepositoryRef"
 $ProfileUri = "$RepoRaw/profiles/MasterMack-6.1-DISPLAY.ps1"
 $ProfilePath = $PROFILE.CurrentUserCurrentHost
 $ProfileDir = Split-Path -Parent $ProfilePath
